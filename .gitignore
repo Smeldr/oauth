@@ -1,0 +1,21 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of `go build`
+/forge-oauth
+
+# Go workspace file
+go.work
+go.work.sum
+
+# SQLite databases (local dev)
+*.db
+*.db-shm
+*.db-wal
