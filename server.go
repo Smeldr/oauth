@@ -67,7 +67,7 @@ type Config struct {
 	// Returns true if the token authenticates a valid user on the Forge site.
 	// Required — New panics if nil.
 	//
-	// Example using forge.VerifyTokenString (forge-cms.dev/forge v1.25.0+):
+	// Example using forge.VerifyTokenString (smeldr.dev/core v1.25.0+):
 	//
 	//	VerifyBearer: func(token string) bool {
 	//	    _, ok := forge.VerifyTokenString(token, app.Secret(), app.TokenStore())

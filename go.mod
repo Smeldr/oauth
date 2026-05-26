@@ -1,4 +1,4 @@
-module forge-cms.dev/forge-oauth
+module smeldr.dev/oauth
 
 go 1.26.3
 

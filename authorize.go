@@ -63,7 +63,7 @@ var authorizeForm = template.Must(template.New("authorize").Parse(`<!DOCTYPE htm
       placeholder="Paste your Forge bearer token" autocomplete="off" required>
     <button type="submit">Approve</button>
   </form>
-  <p class="footer">Powered by <a href="https://forge-cms.dev">forge-cms.dev</a></p>
+  <p class="footer">Powered by <a href="https://smeldr.dev">smeldr.dev</a></p>
 </div>
 </body>
 </html>

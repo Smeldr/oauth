@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	forgeoauth "forge-cms.dev/forge-oauth"
+	forgeoauth "smeldr.dev/oauth"
 )
 
 // testStore builds an in-memory SQLiteStore for tests.

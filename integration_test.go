@@ -26,7 +26,7 @@ import (
 	"testing"
 	"time"
 
-	forgeoauth "forge-cms.dev/forge-oauth"
+	forgeoauth "smeldr.dev/oauth"
 )
 
 func TestFullFlow(t *testing.T) {
