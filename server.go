@@ -18,7 +18,7 @@
 //	srv := forgeoauth.New(forgeoauth.Config{
 //	    Issuer: "https://cms.example.com",
 //	    VerifyBearer: func(token string) bool {
-//	        _, ok := forge.VerifyTokenString(token, app.Secret(), app.TokenStore())
+//	        _, ok := smeldr.VerifyTokenString(token, app.Secret(), app.TokenStore())
 //	        return ok
 //	    },
 //	}, store)
@@ -67,10 +67,10 @@ type Config struct {
 	// Returns true if the token authenticates a valid user on the Forge site.
 	// Required — New panics if nil.
 	//
-	// Example using forge.VerifyTokenString (smeldr.dev/core v1.25.0+):
+	// Example using smeldr.VerifyTokenString (smeldr.dev/core v1.25.0+):
 	//
 	//	VerifyBearer: func(token string) bool {
-	//	    _, ok := forge.VerifyTokenString(token, app.Secret(), app.TokenStore())
+	//	    _, ok := smeldr.VerifyTokenString(token, app.Secret(), app.TokenStore())
 	//	    return ok
 	//	},
 	VerifyBearer func(token string) bool
