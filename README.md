@@ -49,7 +49,7 @@ import (
 )
 
 func main() {
-    app := forge.New(forge.Config{...})
+    app := smeldr.New(smeldr.Config{...})
 
     store, err := forgeoauth.NewSQLiteStore("./forge-oauth.db")
     if err != nil {
@@ -59,8 +59,8 @@ func main() {
     oauthSrv := forgeoauth.New(forgeoauth.Config{
         Issuer: "https://cms.example.com",
         VerifyBearer: func(token string) bool {
-            // Validate Forge bearer token using forge.VerifyTokenString (v1.25.0+).
-            _, ok := forge.VerifyTokenString(token, app.Secret(), app.TokenStore())
+            // Validate Forge bearer token using smeldr.VerifyTokenString (v1.25.0+).
+            _, ok := smeldr.VerifyTokenString(token, app.Secret(), app.TokenStore())
             return ok
         },
     }, store)
