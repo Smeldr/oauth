@@ -119,12 +119,14 @@ func New(cfg Config, store Store) *Server {
 //	GET  /oauth/authorize                          — authorization form
 //	POST /oauth/authorize                          — form submission
 //	POST /oauth/token                              — code exchange and token refresh
+//	POST /oauth/revoke                             — RFC 7009 token revocation
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /.well-known/oauth-authorization-server", s.metadataHandler)
 	mux.HandleFunc("GET /oauth/authorize", s.authorizeGetHandler)
 	mux.HandleFunc("POST /oauth/authorize", s.authorizePostHandler)
 	mux.HandleFunc("POST /oauth/token", s.tokenHandler)
+	mux.HandleFunc("POST /oauth/revoke", s.revokeHandler)
 	return mux
 }
 
