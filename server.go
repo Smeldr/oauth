@@ -63,8 +63,8 @@ type Config struct {
 	// Default: 5 minutes.
 	AuthCodeTTL time.Duration
 
-	// VerifyBearer validates a Forge bearer token submitted at /oauth/authorize.
-	// Returns true if the token authenticates a valid user on the Forge site.
+	// VerifyBearer validates a Smeldr bearer token submitted at /oauth/authorize.
+	// Returns true if the token authenticates a valid user on the Smeldr site.
 	// Required — New panics if nil.
 	//
 	// Example using smeldr.VerifyTokenString (smeldr.dev/core v1.25.0+):

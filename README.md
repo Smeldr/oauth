@@ -24,7 +24,7 @@ servers; forge-oauth provides the server-side implementation.
 - Stateless client validation via CIMD (no client registration database)
 - PKCE S256 — mandatory for all authorization requests
 - Refresh tokens via `offline_access` scope (required for ChatGPT)
-- HTML authorization form — user pastes their existing Forge bearer token
+- HTML authorization form — user pastes their Smeldr bearer token
 - SQLite storage out of the box (`modernc.org/sqlite` — no CGO)
 - `slog`-based structured logging
 
@@ -59,7 +59,7 @@ func main() {
     oauthSrv := forgeoauth.New(forgeoauth.Config{
         Issuer: "https://cms.example.com",
         VerifyBearer: func(token string) bool {
-            // Validate Forge bearer token using smeldr.VerifyTokenString (v1.25.0+).
+            // Validate Smeldr bearer token using smeldr.VerifyTokenString (v1.25.0+).
             _, ok := smeldr.VerifyTokenString(token, app.Secret(), app.TokenStore())
             return ok
         },
@@ -85,13 +85,13 @@ To test end-to-end with ChatGPT Plus:
 
 1. Install ngrok: `winget install ngrok.ngrok`
 2. Configure: `ngrok config add-authtoken <your-token>`
-3. Start your Forge + MCP server locally on port 8080
+3. Start your Smeldr + MCP server locally on port 8080
 4. Run `ngrok http 8080` — note the HTTPS URL (e.g. `https://abc123.ngrok-free.app`)
 5. Set `Issuer: "https://abc123.ngrok-free.app"` in `forgeoauth.Config`
 6. Restart the server with the ngrok URL
 7. In ChatGPT Plus: Settings → Connected Apps → Add → paste the ngrok HTTPS URL
 8. ChatGPT triggers the OAuth flow → browser opens the authorization form
-9. Paste your Forge bearer token → click Approve
+9. Paste your Smeldr bearer token → click Approve
 10. ChatGPT receives an access token and can call MCP tools (e.g. `list_posts`)
 
 ## Storage
@@ -108,4 +108,4 @@ Three SQLite tables are created automatically by `NewSQLiteStore`:
 
 MIT — see [LICENSE](LICENSE).
 
-Part of the [Forge CMS](https://forge-cms.dev) ecosystem.
+Part of the [Smeldr](https://smeldr.dev) ecosystem.

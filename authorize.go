@@ -10,13 +10,13 @@ import (
 
 // authorizeForm is the HTML template rendered at GET /oauth/authorize.
 // It presents a minimal form for the user to approve the authorization
-// request by submitting their existing Forge bearer token.
+// request by submitting their Smeldr bearer token.
 var authorizeForm = template.Must(template.New("authorize").Parse(`<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Authorize — Forge</title>
+<title>Authorize — Smeldr</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { font-family: system-ui, sans-serif; background: #f9f9f9; color: #111;
@@ -46,7 +46,7 @@ var authorizeForm = template.Must(template.New("authorize").Parse(`<!DOCTYPE htm
 <div class="card">
   <h1>Authorize Access</h1>
   <p class="meta">
-    <strong>{{.ClientName}}</strong> is requesting access to your Forge site
+    <strong>{{.ClientName}}</strong> is requesting access to your Smeldr site
     with scope <span class="scope">{{.Scope}}</span>.
   </p>
   {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
@@ -58,9 +58,9 @@ var authorizeForm = template.Must(template.New("authorize").Parse(`<!DOCTYPE htm
     <input type="hidden" name="state"                  value="{{.State}}">
     <input type="hidden" name="code_challenge"         value="{{.CodeChallenge}}">
     <input type="hidden" name="code_challenge_method"  value="{{.CodeChallengeMethod}}">
-    <label for="bearer_token">Forge Bearer Token</label>
+    <label for="bearer_token">Smeldr Bearer Token</label>
     <input type="password" id="bearer_token" name="bearer_token"
-      placeholder="Paste your Forge bearer token" autocomplete="off" required>
+      placeholder="Paste your Smeldr bearer token" autocomplete="off" required>
     <button type="submit">Approve</button>
   </form>
   <p class="footer">Powered by <a href="https://smeldr.dev">smeldr.dev</a></p>
@@ -205,7 +205,7 @@ func (s *Server) authorizePostHandler(w http.ResponseWriter, r *http.Request) {
 		data := authorizeFormData{
 			authorizeParams: p,
 			ClientName:      clientName,
-			Error:           "Invalid bearer token. Please paste a valid Forge bearer token.",
+			Error:           "Invalid bearer token. Please paste a valid Smeldr bearer token.",
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusUnauthorized)
