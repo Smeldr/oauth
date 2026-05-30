@@ -7,6 +7,15 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.1.5] — 2026-05-30
+
+### Changed
+
+- Authorization form, error messages, comments, README, and LICENSE: "Forge" → "Smeldr"
+  brand update throughout.
+
+---
+
 ## [0.1.0] — 2026-05-24
 
 Initial release. OAuth 2.1 authorization server for remote MCP servers.
