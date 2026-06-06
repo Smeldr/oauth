@@ -1,4 +1,4 @@
-package forgeoauth
+package oauth
 
 import (
 	"context"
@@ -45,11 +45,11 @@ type SQLiteStore struct {
 func NewSQLiteStore(path string) (*SQLiteStore, error) {
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
-		return nil, fmt.Errorf("forgeoauth: open sqlite %q: %w", path, err)
+		return nil, fmt.Errorf("oauth: open sqlite %q: %w", path, err)
 	}
 	if _, err := db.Exec(createTablesSQL); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("forgeoauth: create tables: %w", err)
+		return nil, fmt.Errorf("oauth: create tables: %w", err)
 	}
 	return &SQLiteStore{db: db}, nil
 }

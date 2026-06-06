@@ -1,4 +1,4 @@
-package forgeoauth_test
+package oauth_test
 
 import (
 	"context"
@@ -14,13 +14,13 @@ import (
 	"testing"
 	"time"
 
-	forgeoauth "smeldr.dev/oauth"
+	"smeldr.dev/oauth"
 )
 
 // testStore builds an in-memory SQLiteStore for tests.
-func testStore(t *testing.T) *forgeoauth.SQLiteStore {
+func testStore(t *testing.T) *oauth.SQLiteStore {
 	t.Helper()
-	st, err := forgeoauth.NewSQLiteStore(":memory:")
+	st, err := oauth.NewSQLiteStore(":memory:")
 	if err != nil {
 		t.Fatalf("NewSQLiteStore: %v", err)
 	}
@@ -36,12 +36,12 @@ func testPKCE() (verifier, challenge string) {
 	return
 }
 
-// newTestServer creates a forge-oauth TLS httptest.Server (https://).
+// newTestServer creates an oauth TLS httptest.Server (https://).
 // The CIMD metadata document is served by the test server itself:
 // client_id == testServer.URL.
-// The forge-oauth Server is configured with ts.Client() as HTTPClient so
+// The oauth Server is configured with ts.Client() as HTTPClient so
 // that CIMD fetches trust the test TLS certificate.
-func newTestServer(t *testing.T, verifyBearer func(string) bool) (*httptest.Server, *forgeoauth.SQLiteStore) {
+func newTestServer(t *testing.T, verifyBearer func(string) bool) (*httptest.Server, *oauth.SQLiteStore) {
 	t.Helper()
 	store := testStore(t)
 
@@ -67,7 +67,7 @@ func newTestServer(t *testing.T, verifyBearer func(string) bool) (*httptest.Serv
 	}))
 	t.Cleanup(ts.Close)
 
-	srv := forgeoauth.New(forgeoauth.Config{
+	srv := oauth.New(oauth.Config{
 		Issuer:       ts.URL,
 		VerifyBearer: verifyBearer,
 		HTTPClient:   ts.Client(), // trusts the test TLS certificate
@@ -296,10 +296,10 @@ func TestAuthorizePost_InvalidBearer(t *testing.T) {
 
 func TestPKCE_Verification(t *testing.T) {
 	verifier, challenge := testPKCE()
-	if !forgeoauth.VerifyPKCE(verifier, challenge) {
+	if !oauth.VerifyPKCE(verifier, challenge) {
 		t.Error("VerifyPKCE: correct verifier should return true")
 	}
-	if forgeoauth.VerifyPKCE("wrong-verifier", challenge) {
+	if oauth.VerifyPKCE("wrong-verifier", challenge) {
 		t.Error("VerifyPKCE: wrong verifier should return false")
 	}
 }
@@ -319,7 +319,7 @@ func TestTokenExchange_Valid(t *testing.T) {
 
 	// Pre-store a valid auth code.
 	code := "test-code-valid-001"
-	_ = store.SaveCode(context.Background(), forgeoauth.AuthCode{
+	_ = store.SaveCode(context.Background(), oauth.AuthCode{
 		Code:          code,
 		ClientID:      ts.URL,
 		RedirectURI:   ts.URL + "/callback",
@@ -360,7 +360,7 @@ func TestTokenExchange_ExpiredCode(t *testing.T) {
 	verifier, _ := testPKCE()
 
 	code := "test-code-expired-001"
-	_ = store.SaveCode(context.Background(), forgeoauth.AuthCode{
+	_ = store.SaveCode(context.Background(), oauth.AuthCode{
 		Code:          code,
 		ClientID:      ts.URL,
 		RedirectURI:   ts.URL + "/callback",
@@ -393,7 +393,7 @@ func TestTokenExchange_WrongVerifier(t *testing.T) {
 	_, challenge := testPKCE()
 
 	code := "test-code-wrong-verifier-001"
-	_ = store.SaveCode(context.Background(), forgeoauth.AuthCode{
+	_ = store.SaveCode(context.Background(), oauth.AuthCode{
 		Code:          code,
 		ClientID:      ts.URL,
 		RedirectURI:   ts.URL + "/callback",
@@ -425,7 +425,7 @@ func TestTokenRefresh_Valid(t *testing.T) {
 	ts, store := newTestServer(t, func(string) bool { return true })
 
 	refreshToken := "test-refresh-token-001"
-	_ = store.SaveRefreshToken(context.Background(), forgeoauth.RefreshToken{
+	_ = store.SaveRefreshToken(context.Background(), oauth.RefreshToken{
 		Token:    refreshToken,
 		ClientID: ts.URL,
 		Scope:    "mcp offline_access",
@@ -473,14 +473,14 @@ func TestValidateAccessToken_Valid(t *testing.T) {
 	ts, store := newTestServer(t, func(string) bool { return true })
 
 	token := "test-access-token-valid"
-	_ = store.SaveToken(context.Background(), forgeoauth.AccessToken{
+	_ = store.SaveToken(context.Background(), oauth.AccessToken{
 		Token:     token,
 		ClientID:  ts.URL,
 		Scope:     "mcp",
 		ExpiresAt: time.Now().Add(time.Hour),
 	})
 
-	srv := forgeoauth.New(forgeoauth.Config{
+	srv := oauth.New(oauth.Config{
 		Issuer:       ts.URL,
 		VerifyBearer: func(string) bool { return true },
 	}, store)
@@ -498,14 +498,14 @@ func TestValidateAccessToken_Expired(t *testing.T) {
 	ts, store := newTestServer(t, func(string) bool { return true })
 
 	token := "test-access-token-expired"
-	_ = store.SaveToken(context.Background(), forgeoauth.AccessToken{
+	_ = store.SaveToken(context.Background(), oauth.AccessToken{
 		Token:     token,
 		ClientID:  ts.URL,
 		Scope:     "mcp",
 		ExpiresAt: time.Now().Add(-time.Hour), // already expired
 	})
 
-	srv := forgeoauth.New(forgeoauth.Config{
+	srv := oauth.New(oauth.Config{
 		Issuer:       ts.URL,
 		VerifyBearer: func(string) bool { return true },
 	}, store)
@@ -520,7 +520,7 @@ func TestValidateAccessToken_Expired(t *testing.T) {
 func TestValidateAccessToken_Unknown(t *testing.T) {
 	ts, store := newTestServer(t, func(string) bool { return true })
 
-	srv := forgeoauth.New(forgeoauth.Config{
+	srv := oauth.New(oauth.Config{
 		Issuer:       ts.URL,
 		VerifyBearer: func(string) bool { return true },
 	}, store)

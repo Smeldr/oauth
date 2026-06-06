@@ -1,4 +1,4 @@
-package forgeoauth
+package oauth
 
 import (
 	"crypto/rand"
@@ -24,7 +24,7 @@ func VerifyPKCE(codeVerifier, codeChallenge string) bool {
 func newToken(n int) (string, error) {
 	b := make([]byte, n)
 	if _, err := rand.Read(b); err != nil {
-		return "", fmt.Errorf("forgeoauth: generate token: %w", err)
+		return "", fmt.Errorf("oauth: generate token: %w", err)
 	}
 	return hex.EncodeToString(b), nil
 }

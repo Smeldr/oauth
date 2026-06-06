@@ -1,4 +1,4 @@
-package forgeoauth
+package oauth
 
 import (
 	"html/template"
@@ -136,7 +136,7 @@ func (s *Server) authorizeGetHandler(w http.ResponseWriter, r *http.Request) {
 
 	doc, err := s.fetchCIMD(p.ClientID, p.RedirectURI)
 	if err != nil {
-		slog.Warn("forge-oauth: CIMD fetch failed",
+		slog.Warn("oauth: CIMD fetch failed",
 			"client_id", p.ClientID,
 			"remote_addr", addr,
 			"error", err,
@@ -155,7 +155,7 @@ func (s *Server) authorizeGetHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := authorizeForm.Execute(w, data); err != nil {
-		slog.Warn("forge-oauth: authorize form render failed",
+		slog.Warn("oauth: authorize form render failed",
 			"client_id", p.ClientID,
 			"remote_addr", addr,
 			"error", err,
@@ -182,7 +182,7 @@ func (s *Server) authorizePostHandler(w http.ResponseWriter, r *http.Request) {
 
 	doc, err := s.fetchCIMD(p.ClientID, p.RedirectURI)
 	if err != nil {
-		slog.Warn("forge-oauth: CIMD fetch failed",
+		slog.Warn("oauth: CIMD fetch failed",
 			"client_id", p.ClientID,
 			"remote_addr", addr,
 			"error", err,
@@ -193,7 +193,7 @@ func (s *Server) authorizePostHandler(w http.ResponseWriter, r *http.Request) {
 
 	bearerToken := r.FormValue("bearer_token")
 	if !s.cfg.VerifyBearer(bearerToken) {
-		slog.Warn("forge-oauth: bearer token validation failed",
+		slog.Warn("oauth: bearer token validation failed",
 			"client_id", p.ClientID,
 			"remote_addr", addr,
 		)
@@ -215,7 +215,7 @@ func (s *Server) authorizePostHandler(w http.ResponseWriter, r *http.Request) {
 
 	code, err := newToken(32)
 	if err != nil {
-		slog.Warn("forge-oauth: failed to generate auth code",
+		slog.Warn("oauth: failed to generate auth code",
 			"client_id", p.ClientID,
 			"remote_addr", addr,
 			"error", err,
@@ -233,7 +233,7 @@ func (s *Server) authorizePostHandler(w http.ResponseWriter, r *http.Request) {
 		ExpiresAt:     s.now().Add(s.cfg.AuthCodeTTL),
 	}
 	if err := s.store.SaveCode(r.Context(), authCode); err != nil {
-		slog.Warn("forge-oauth: failed to save auth code",
+		slog.Warn("oauth: failed to save auth code",
 			"client_id", p.ClientID,
 			"remote_addr", addr,
 			"error", err,
@@ -242,7 +242,7 @@ func (s *Server) authorizePostHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	slog.Info("forge-oauth: authorization granted",
+	slog.Info("oauth: authorization granted",
 		"client_id", p.ClientID,
 		"scope", p.Scope,
 		"remote_addr", addr,

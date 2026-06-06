@@ -1,4 +1,4 @@
-package forgeoauth_test
+package oauth_test
 
 // Lag 2 — full OAuth flow integration test.
 //
@@ -26,11 +26,11 @@ import (
 	"testing"
 	"time"
 
-	forgeoauth "smeldr.dev/oauth"
+	"smeldr.dev/oauth"
 )
 
 func TestFullFlow(t *testing.T) {
-	store, err := forgeoauth.NewSQLiteStore(":memory:")
+	store, err := oauth.NewSQLiteStore(":memory:")
 	if err != nil {
 		t.Fatalf("NewSQLiteStore: %v", err)
 	}
@@ -61,7 +61,7 @@ func TestFullFlow(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	srv := forgeoauth.New(forgeoauth.Config{
+	srv := oauth.New(oauth.Config{
 		Issuer:       ts.URL,
 		VerifyBearer: func(token string) bool { return token == "valid-forge-token" },
 		HTTPClient:   ts.Client(), // trusts the test TLS certificate
@@ -192,20 +192,20 @@ func TestFullFlow(t *testing.T) {
 }
 
 func TestFullFlow_RefreshToken(t *testing.T) {
-	store, err := forgeoauth.NewSQLiteStore(":memory:")
+	store, err := oauth.NewSQLiteStore(":memory:")
 	if err != nil {
 		t.Fatalf("NewSQLiteStore: %v", err)
 	}
 	defer store.Close()
 
-	srv := forgeoauth.New(forgeoauth.Config{
+	srv := oauth.New(oauth.Config{
 		Issuer:       "https://example.com",
 		VerifyBearer: func(string) bool { return true },
 	}, store)
 
 	// Pre-store a refresh token.
 	refreshToken := "integration-refresh-token-001"
-	_ = store.SaveRefreshToken(context.Background(), forgeoauth.RefreshToken{
+	_ = store.SaveRefreshToken(context.Background(), oauth.RefreshToken{
 		Token:    refreshToken,
 		ClientID: "https://client.example.com",
 		Scope:    "mcp offline_access",

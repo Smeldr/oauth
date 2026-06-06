@@ -1,4 +1,4 @@
-package forgeoauth
+package oauth
 
 import (
 	"encoding/json"
@@ -53,7 +53,7 @@ func (s *Server) handleCodeExchange(w http.ResponseWriter, r *http.Request) {
 	_ = s.store.DeleteCode(ctx, code)
 
 	if s.now().After(stored.ExpiresAt) {
-		slog.Warn("forge-oauth: authorization code expired",
+		slog.Warn("oauth: authorization code expired",
 			"client_id", clientID,
 			"remote_addr", addr,
 		)
@@ -62,7 +62,7 @@ func (s *Server) handleCodeExchange(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !VerifyPKCE(codeVerifier, stored.CodeChallenge) {
-		slog.Warn("forge-oauth: invalid code_verifier",
+		slog.Warn("oauth: invalid code_verifier",
 			"client_id", clientID,
 			"remote_addr", addr,
 		)
@@ -97,7 +97,7 @@ func (s *Server) handleCodeExchange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	slog.Info("forge-oauth: access token issued",
+	slog.Info("oauth: access token issued",
 		"client_id", clientID,
 		"scope", stored.Scope,
 		"expires_in", int(ttl.Seconds()),
@@ -174,7 +174,7 @@ func (s *Server) handleRefreshToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	slog.Info("forge-oauth: refresh token used",
+	slog.Info("oauth: refresh token used",
 		"client_id", clientID,
 		"remote_addr", addr,
 	)

@@ -1,9 +1,21 @@
 # Changelog
 
-All notable changes to forge-oauth are documented in this file.
+All notable changes to smeldr.dev/oauth are documented in this file.
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+---
+
+## [0.2.0] — 2026-06-06
+
+### Changed (breaking)
+
+- Package renamed `forgeoauth` → `oauth`. Update imports from `forgeoauth.X` to
+  `oauth.X` (or drop the alias: `import "smeldr.dev/oauth"`). No exported symbols
+  changed — only the package qualifier at call sites.
+- Error string prefixes updated from `forgeoauth:` to `oauth:` throughout
+  (sentinels, panics, and wrapped errors).
 
 ---
 

@@ -1,4 +1,4 @@
-package forgeoauth
+package oauth
 
 import (
 	"encoding/json"
@@ -29,31 +29,31 @@ type CIMDDoc struct {
 // On any failure an error is returned and the caller must log a Warn event.
 func (s *Server) fetchCIMD(clientID, redirectURI string) (*CIMDDoc, error) {
 	if !strings.HasPrefix(clientID, "https://") {
-		return nil, fmt.Errorf("forgeoauth: client_id must be an HTTPS URL, got %q", clientID)
+		return nil, fmt.Errorf("oauth: client_id must be an HTTPS URL, got %q", clientID)
 	}
 
 	resp, err := s.cfg.HTTPClient.Get(clientID) //nolint:noctx
 	if err != nil {
-		return nil, fmt.Errorf("forgeoauth: CIMD fetch %q: %w", clientID, err)
+		return nil, fmt.Errorf("oauth: CIMD fetch %q: %w", clientID, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("forgeoauth: CIMD fetch %q: status %d", clientID, resp.StatusCode)
+		return nil, fmt.Errorf("oauth: CIMD fetch %q: status %d", clientID, resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
 	if err != nil {
-		return nil, fmt.Errorf("forgeoauth: CIMD read %q: %w", clientID, err)
+		return nil, fmt.Errorf("oauth: CIMD read %q: %w", clientID, err)
 	}
 
 	var doc CIMDDoc
 	if err := json.Unmarshal(body, &doc); err != nil {
-		return nil, fmt.Errorf("forgeoauth: CIMD parse %q: %w", clientID, err)
+		return nil, fmt.Errorf("oauth: CIMD parse %q: %w", clientID, err)
 	}
 
 	if doc.ClientID != clientID {
-		return nil, fmt.Errorf("forgeoauth: CIMD client_id mismatch: got %q, want %q", doc.ClientID, clientID)
+		return nil, fmt.Errorf("oauth: CIMD client_id mismatch: got %q, want %q", doc.ClientID, clientID)
 	}
 
 	for _, u := range doc.RedirectURIs {
@@ -61,5 +61,5 @@ func (s *Server) fetchCIMD(clientID, redirectURI string) (*CIMDDoc, error) {
 			return &doc, nil
 		}
 	}
-	return nil, fmt.Errorf("forgeoauth: redirect_uri %q not listed in CIMD for %q", redirectURI, clientID)
+	return nil, fmt.Errorf("oauth: redirect_uri %q not listed in CIMD for %q", redirectURI, clientID)
 }

@@ -1,22 +1,22 @@
-# forge-oauth
+# smeldr.dev/oauth
 
 OAuth 2.1 authorization server for remote MCP servers.
 
-[![Go Reference](https://pkg.go.dev/badge/forge-cms.dev/forge-oauth.svg)](https://pkg.go.dev/forge-cms.dev/forge-oauth)
-**v0.1.0 — MIT license.**
+[![Go Reference](https://pkg.go.dev/badge/smeldr.dev/oauth.svg)](https://pkg.go.dev/smeldr.dev/oauth)
+**v0.2.0 — MIT license.**
 
 ---
 
-forge-oauth is a standalone Go library that implements an OAuth 2.1 authorization
+smeldr.dev/oauth is a standalone Go library that implements an OAuth 2.1 authorization
 server for use with remote [Model Context Protocol](https://modelcontextprotocol.io)
 servers. ChatGPT Plus and Claude.ai require OAuth 2.1 to connect to remote MCP
-servers; forge-oauth provides the server-side implementation.
+servers; smeldr.dev/oauth provides the server-side implementation.
 
 ## Standards
 
 - **OAuth 2.1** (draft-15): PKCE mandatory, no implicit flow, no ROPC
 - **RFC 8414**: Authorization Server Metadata
-- **RFC 9728**: Protected Resource Metadata (via `forge-cms.dev/forge-mcp`)
+- **RFC 9728**: Protected Resource Metadata (via `smeldr.dev/mcp`)
 - **CIMD**: Client ID Metadata Documents — stateless client validation
 
 ## Features
@@ -31,10 +31,16 @@ servers; forge-oauth provides the server-side implementation.
 ## Installation
 
 ```
-go get forge-cms.dev/forge-oauth
+go get smeldr.dev/oauth
 ```
 
 Requires Go 1.26.3+.
+
+## Migrating from v0.1.x
+
+The package was renamed from `forgeoauth` to `oauth` in v0.2.0.
+Replace `forgeoauth.X` → `oauth.X` at all call sites (or drop the alias:
+`import "smeldr.dev/oauth"`).
 
 ## Quick start
 
@@ -43,20 +49,20 @@ import (
     "log"
     "net/http"
 
-    "forge-cms.dev/forge"
-    forgeoauth "forge-cms.dev/forge-oauth"
-    forgemcp "forge-cms.dev/forge-mcp"
+    "smeldr.dev/core"
+    "smeldr.dev/oauth"
+    forgemcp "smeldr.dev/mcp"
 )
 
 func main() {
     app := smeldr.New(smeldr.Config{...})
 
-    store, err := forgeoauth.NewSQLiteStore("./forge-oauth.db")
+    store, err := oauth.NewSQLiteStore("./oauth.db")
     if err != nil {
         log.Fatal(err)
     }
 
-    oauthSrv := forgeoauth.New(forgeoauth.Config{
+    oauthSrv := oauth.New(oauth.Config{
         Issuer: "https://cms.example.com",
         VerifyBearer: func(token string) bool {
             // Validate Smeldr bearer token using smeldr.VerifyTokenString (v1.25.0+).
@@ -87,7 +93,7 @@ To test end-to-end with ChatGPT Plus:
 2. Configure: `ngrok config add-authtoken <your-token>`
 3. Start your Smeldr + MCP server locally on port 8080
 4. Run `ngrok http 8080` — note the HTTPS URL (e.g. `https://abc123.ngrok-free.app`)
-5. Set `Issuer: "https://abc123.ngrok-free.app"` in `forgeoauth.Config`
+5. Set `Issuer: "https://abc123.ngrok-free.app"` in `oauth.Config`
 6. Restart the server with the ngrok URL
 7. In ChatGPT Plus: Settings → Connected Apps → Add → paste the ngrok HTTPS URL
 8. ChatGPT triggers the OAuth flow → browser opens the authorization form

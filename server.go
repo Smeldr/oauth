@@ -1,4 +1,4 @@
-// Package forgeoauth implements an OAuth 2.1 authorization server for remote
+// Package oauth implements an OAuth 2.1 authorization server for remote
 // MCP servers. It supports the authorization code flow with mandatory PKCE
 // (S256), stateless client validation via Client ID Metadata Documents (CIMD),
 // and optional refresh tokens via the offline_access scope.
@@ -11,11 +11,11 @@
 //
 // # Quick start
 //
-//	store, err := forgeoauth.NewSQLiteStore("./oauth.db")
+//	store, err := oauth.NewSQLiteStore("./oauth.db")
 //	if err != nil {
 //	    log.Fatal(err)
 //	}
-//	srv := forgeoauth.New(forgeoauth.Config{
+//	srv := oauth.New(oauth.Config{
 //	    Issuer: "https://cms.example.com",
 //	    VerifyBearer: func(token string) bool {
 //	        _, ok := smeldr.VerifyTokenString(token, app.Secret(), app.TokenStore())
@@ -25,7 +25,7 @@
 //
 //	// srv.Handler() mounts all OAuth endpoints.
 //	// Embed in a larger mux via forgemcp.WithOAuth(srv).
-package forgeoauth
+package oauth
 
 import (
 	"context"
@@ -38,13 +38,13 @@ import (
 // Sentinel errors returned by [Server.ValidateAccessToken].
 var (
 	// ErrTokenNotFound is returned when the access token does not exist in the store.
-	ErrTokenNotFound = errors.New("forgeoauth: access token not found")
+	ErrTokenNotFound = errors.New("oauth: access token not found")
 	// ErrTokenExpired is returned when the access token exists but has passed its ExpiresAt.
-	ErrTokenExpired = errors.New("forgeoauth: access token expired")
+	ErrTokenExpired = errors.New("oauth: access token expired")
 	// ErrCodeNotFound is returned by [Store.GetCode] when the code does not exist.
-	ErrCodeNotFound = errors.New("forgeoauth: authorization code not found")
+	ErrCodeNotFound = errors.New("oauth: authorization code not found")
 	// ErrRefreshTokenNotFound is returned by [Store.GetRefreshToken] when the token does not exist.
-	ErrRefreshTokenNotFound = errors.New("forgeoauth: refresh token not found")
+	ErrRefreshTokenNotFound = errors.New("oauth: refresh token not found")
 )
 
 // Config holds the configuration for the OAuth 2.1 authorization server.
@@ -92,10 +92,10 @@ type Server struct {
 // Panics if cfg.Issuer is empty or cfg.VerifyBearer is nil.
 func New(cfg Config, store Store) *Server {
 	if cfg.Issuer == "" {
-		panic("forgeoauth: Config.Issuer must not be empty")
+		panic("oauth: Config.Issuer must not be empty")
 	}
 	if cfg.VerifyBearer == nil {
-		panic("forgeoauth: Config.VerifyBearer must not be nil")
+		panic("oauth: Config.VerifyBearer must not be nil")
 	}
 	if cfg.AccessTokenTTL <= 0 {
 		cfg.AccessTokenTTL = time.Hour
