@@ -7,6 +7,17 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.3.0] — 2026-06-11
+
+### Changed
+
+- SQLite table names renamed from `forge_oauth_*` to `smeldr_oauth_*`.
+  Existing databases are migrated automatically at startup via an idempotent
+  `ALTER TABLE … RENAME TO` pass that runs before the `CREATE TABLE IF NOT EXISTS`
+  statements in `NewSQLiteStore`. No action required for fresh installs.
+
+---
+
 ## [0.2.0] — 2026-06-06
 
 ### Changed (breaking)
