@@ -7,6 +7,8 @@
 //
 //   - OAuth 2.1 (draft-15): PKCE mandatory, no implicit flow, no ROPC
 //   - RFC 8414: Authorization Server Metadata
+//   - RFC 8707: Resource Indicators — audience-bound tokens via Config.Resource
+//   - RFC 9207: Authorization Server Issuer Identification — iss on every redirect
 //   - CIMD: stateless client validation by fetching the client_id URL
 //
 // # Quick start
@@ -16,7 +18,8 @@
 //	    log.Fatal(err)
 //	}
 //	srv := oauth.New(oauth.Config{
-//	    Issuer: "https://cms.example.com",
+//	    Issuer:   "https://cms.example.com",
+//	    Resource: "https://cms.example.com/mcp",
 //	    VerifyBearer: func(token string) bool {
 //	        _, ok := smeldr.VerifyTokenString(token, app.Secret(), app.TokenStore())
 //	        return ok
@@ -75,6 +78,17 @@ type Config struct {
 	//	},
 	VerifyBearer func(token string) bool
 
+	// Resource is the canonical resource identifier of the protected MCP server
+	// this authorization server issues audience-bound tokens for (RFC 8707 —
+	// Resource Indicators for OAuth 2.0). It must match the "resource" field the
+	// paired smeldr.dev/mcp instance serves at
+	// /.well-known/oauth-protected-resource — typically "<base-url>/mcp".
+	// Clients must send this same value as the resource parameter at both
+	// /oauth/authorize and /oauth/token; requests with a missing or mismatched
+	// resource are rejected.
+	// Required — New panics if empty.
+	Resource string
+
 	// HTTPClient is used for CIMD metadata fetches.
 	// Default: &http.Client{Timeout: 5 * time.Second}.
 	HTTPClient *http.Client
@@ -96,6 +110,9 @@ func New(cfg Config, store Store) *Server {
 	}
 	if cfg.VerifyBearer == nil {
 		panic("oauth: Config.VerifyBearer must not be nil")
+	}
+	if cfg.Resource == "" {
+		panic("oauth: Config.Resource must not be empty")
 	}
 	if cfg.AccessTokenTTL <= 0 {
 		cfg.AccessTokenTTL = time.Hour

@@ -69,11 +69,19 @@ func newTestServer(t *testing.T, verifyBearer func(string) bool) (*httptest.Serv
 
 	srv := oauth.New(oauth.Config{
 		Issuer:       ts.URL,
+		Resource:     ts.URL + "/mcp",
 		VerifyBearer: verifyBearer,
 		HTTPClient:   ts.Client(), // trusts the test TLS certificate
 	}, store)
 	oauthHandler = srv.Handler()
 	return ts, store
+}
+
+// testResource returns the resource identifier newTestServer configures —
+// callers building their own authorize/token form values need the exact
+// same value the server was constructed with.
+func testResource(ts *httptest.Server) string {
+	return ts.URL + "/mcp"
 }
 
 // — Lag 1: unit tests —
@@ -108,6 +116,9 @@ func TestDiscovery(t *testing.T) {
 	if len(methods) == 0 || methods[0] != "S256" {
 		t.Errorf("code_challenge_methods_supported = %v, want [S256]", methods)
 	}
+	if got := meta["authorization_response_iss_parameter_supported"]; got != true {
+		t.Errorf("authorization_response_iss_parameter_supported = %v, want true", got)
+	}
 }
 
 func TestAuthorizeGet_RendersForm(t *testing.T) {
@@ -123,6 +134,7 @@ func TestAuthorizeGet_RendersForm(t *testing.T) {
 		"code_challenge":        {challenge},
 		"code_challenge_method": {"S256"},
 		"state":                 {"abc123"},
+		"resource":              {testResource(ts)},
 	}
 	resp, err := ts.Client().Get(ts.URL + "/oauth/authorize?" + params.Encode())
 	if err != nil {
@@ -197,6 +209,7 @@ func TestAuthorizeGet_CIMDFetchFailure(t *testing.T) {
 		"redirect_uri":          {"https://unreachable.forge-test.invalid/callback"},
 		"code_challenge":        {challenge},
 		"code_challenge_method": {"S256"},
+		"resource":              {testResource(ts)},
 	}
 	resp, err := ts.Client().Get(ts.URL + "/oauth/authorize?" + params.Encode())
 	if err != nil {
@@ -218,6 +231,7 @@ func TestAuthorizeGet_RedirectURINotInCIMD(t *testing.T) {
 		"redirect_uri":          {ts.URL + "/not-listed"},
 		"code_challenge":        {challenge},
 		"code_challenge_method": {"S256"},
+		"resource":              {testResource(ts)},
 	}
 	resp, err := ts.Client().Get(ts.URL + "/oauth/authorize?" + params.Encode())
 	if err != nil {
@@ -226,6 +240,58 @@ func TestAuthorizeGet_RedirectURINotInCIMD(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("status %d, want 400", resp.StatusCode)
+	}
+}
+
+func TestAuthorizeGet_MissingResource(t *testing.T) {
+	ts, _ := newTestServer(t, func(string) bool { return true })
+	_, challenge := testPKCE()
+
+	params := url.Values{
+		"response_type":         {"code"},
+		"client_id":             {ts.URL},
+		"redirect_uri":          {ts.URL + "/callback"},
+		"code_challenge":        {challenge},
+		"code_challenge_method": {"S256"},
+		// resource omitted
+	}
+	resp, err := ts.Client().Get(ts.URL + "/oauth/authorize?" + params.Encode())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status %d, want 400", resp.StatusCode)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "missing resource") {
+		t.Errorf("body = %q, want it to mention missing resource", body)
+	}
+}
+
+func TestAuthorizeGet_ResourceMismatch(t *testing.T) {
+	ts, _ := newTestServer(t, func(string) bool { return true })
+	_, challenge := testPKCE()
+
+	params := url.Values{
+		"response_type":         {"code"},
+		"client_id":             {ts.URL},
+		"redirect_uri":          {ts.URL + "/callback"},
+		"code_challenge":        {challenge},
+		"code_challenge_method": {"S256"},
+		"resource":              {"https://not-this-server.example.com/mcp"},
+	}
+	resp, err := ts.Client().Get(ts.URL + "/oauth/authorize?" + params.Encode())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status %d, want 400", resp.StatusCode)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "not a valid target") {
+		t.Errorf("body = %q, want it to mention an invalid target", body)
 	}
 }
 
@@ -242,6 +308,7 @@ func TestAuthorizePost_ValidBearer(t *testing.T) {
 		"code_challenge":        {challenge},
 		"code_challenge_method": {"S256"},
 		"bearer_token":          {"valid-forge-token"},
+		"resource":              {testResource(ts)},
 	}
 	// Follow redirects manually to inspect the redirect URL.
 	client := ts.Client()
@@ -265,6 +332,9 @@ func TestAuthorizePost_ValidBearer(t *testing.T) {
 	if !strings.Contains(loc, "state=xyz") {
 		t.Errorf("redirect location %q does not contain state=xyz", loc)
 	}
+	if !strings.Contains(loc, "iss="+url.QueryEscape(ts.URL)) {
+		t.Errorf("redirect location %q does not contain iss=%s (RFC 9207)", loc, ts.URL)
+	}
 }
 
 func TestAuthorizePost_InvalidBearer(t *testing.T) {
@@ -279,6 +349,7 @@ func TestAuthorizePost_InvalidBearer(t *testing.T) {
 		"code_challenge":        {challenge},
 		"code_challenge_method": {"S256"},
 		"bearer_token":          {"bad-token"},
+		"resource":              {testResource(ts)},
 	}
 	resp, err := ts.Client().PostForm(ts.URL+"/oauth/authorize", form)
 	if err != nil {
@@ -325,6 +396,7 @@ func TestTokenExchange_Valid(t *testing.T) {
 		RedirectURI:   ts.URL + "/callback",
 		Scope:         "mcp offline_access",
 		CodeChallenge: challenge,
+		Resource:      testResource(ts),
 		ExpiresAt:     time.Now().Add(5 * time.Minute),
 	})
 
@@ -334,6 +406,7 @@ func TestTokenExchange_Valid(t *testing.T) {
 		"client_id":     {ts.URL},
 		"redirect_uri":  {ts.URL + "/callback"},
 		"code_verifier": {verifier},
+		"resource":      {testResource(ts)},
 	})
 	defer resp.Body.Close()
 
@@ -366,6 +439,7 @@ func TestTokenExchange_ExpiredCode(t *testing.T) {
 		RedirectURI:   ts.URL + "/callback",
 		Scope:         "mcp",
 		CodeChallenge: challenge,
+		Resource:      testResource(ts),
 		ExpiresAt:     time.Now().Add(-time.Minute), // already expired
 	})
 
@@ -375,6 +449,7 @@ func TestTokenExchange_ExpiredCode(t *testing.T) {
 		"client_id":     {ts.URL},
 		"redirect_uri":  {ts.URL + "/callback"},
 		"code_verifier": {verifier},
+		"resource":      {testResource(ts)},
 	})
 	defer resp.Body.Close()
 
@@ -399,6 +474,7 @@ func TestTokenExchange_WrongVerifier(t *testing.T) {
 		RedirectURI:   ts.URL + "/callback",
 		Scope:         "mcp",
 		CodeChallenge: challenge,
+		Resource:      testResource(ts),
 		ExpiresAt:     time.Now().Add(5 * time.Minute),
 	})
 
@@ -408,6 +484,7 @@ func TestTokenExchange_WrongVerifier(t *testing.T) {
 		"client_id":     {ts.URL},
 		"redirect_uri":  {ts.URL + "/callback"},
 		"code_verifier": {"wrong-verifier-value"},
+		"resource":      {testResource(ts)},
 	})
 	defer resp.Body.Close()
 
@@ -418,6 +495,76 @@ func TestTokenExchange_WrongVerifier(t *testing.T) {
 	json.NewDecoder(resp.Body).Decode(&result)
 	if result["error"] != "invalid_grant" {
 		t.Errorf("error = %q, want invalid_grant", result["error"])
+	}
+}
+
+func TestTokenExchange_MissingResource(t *testing.T) {
+	ts, store := newTestServer(t, func(string) bool { return true })
+	verifier, challenge := testPKCE()
+
+	code := "test-code-missing-resource-001"
+	_ = store.SaveCode(context.Background(), oauth.AuthCode{
+		Code:          code,
+		ClientID:      ts.URL,
+		RedirectURI:   ts.URL + "/callback",
+		Scope:         "mcp",
+		CodeChallenge: challenge,
+		Resource:      testResource(ts),
+		ExpiresAt:     time.Now().Add(5 * time.Minute),
+	})
+
+	resp := postToken(t, ts.Client(), ts.URL, url.Values{
+		"grant_type":    {"authorization_code"},
+		"code":          {code},
+		"client_id":     {ts.URL},
+		"redirect_uri":  {ts.URL + "/callback"},
+		"code_verifier": {verifier},
+		// resource omitted
+	})
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status %d, want 400", resp.StatusCode)
+	}
+	var result map[string]any
+	json.NewDecoder(resp.Body).Decode(&result)
+	if result["error"] != "invalid_request" {
+		t.Errorf("error = %q, want invalid_request", result["error"])
+	}
+}
+
+func TestTokenExchange_ResourceMismatch(t *testing.T) {
+	ts, store := newTestServer(t, func(string) bool { return true })
+	verifier, challenge := testPKCE()
+
+	code := "test-code-resource-mismatch-001"
+	_ = store.SaveCode(context.Background(), oauth.AuthCode{
+		Code:          code,
+		ClientID:      ts.URL,
+		RedirectURI:   ts.URL + "/callback",
+		Scope:         "mcp",
+		CodeChallenge: challenge,
+		Resource:      testResource(ts),
+		ExpiresAt:     time.Now().Add(5 * time.Minute),
+	})
+
+	resp := postToken(t, ts.Client(), ts.URL, url.Values{
+		"grant_type":    {"authorization_code"},
+		"code":          {code},
+		"client_id":     {ts.URL},
+		"redirect_uri":  {ts.URL + "/callback"},
+		"code_verifier": {verifier},
+		"resource":      {"https://different-resource.example.com/mcp"},
+	})
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status %d, want 400", resp.StatusCode)
+	}
+	var result map[string]any
+	json.NewDecoder(resp.Body).Decode(&result)
+	if result["error"] != "invalid_target" {
+		t.Errorf("error = %q, want invalid_target", result["error"])
 	}
 }
 
@@ -446,6 +593,45 @@ func TestTokenRefresh_Valid(t *testing.T) {
 	json.NewDecoder(resp.Body).Decode(&result)
 	if result["access_token"] == "" {
 		t.Error("missing access_token in refresh response")
+	}
+}
+
+func TestTokenRefresh_ResourceIsConfigured(t *testing.T) {
+	ts, store := newTestServer(t, func(string) bool { return true })
+
+	refreshToken := "test-refresh-token-resource-001"
+	_ = store.SaveRefreshToken(context.Background(), oauth.RefreshToken{
+		Token:    refreshToken,
+		ClientID: ts.URL,
+		Scope:    "mcp offline_access",
+	})
+
+	resp := postToken(t, ts.Client(), ts.URL, url.Values{
+		"grant_type":    {"refresh_token"},
+		"refresh_token": {refreshToken},
+		"client_id":     {ts.URL},
+	})
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status %d, want 200; body: %s", resp.StatusCode, body)
+	}
+	var result map[string]any
+	json.NewDecoder(resp.Body).Decode(&result)
+	accessToken, _ := result["access_token"].(string)
+
+	srv := oauth.New(oauth.Config{
+		Issuer:       ts.URL,
+		Resource:     testResource(ts),
+		VerifyBearer: func(string) bool { return true },
+	}, store)
+	at, err := srv.ValidateAccessToken(context.Background(), accessToken)
+	if err != nil {
+		t.Fatalf("ValidateAccessToken: %v", err)
+	}
+	if at.Resource != testResource(ts) {
+		t.Errorf("Resource = %q, want %q (configured resource, no client param in refresh grant)", at.Resource, testResource(ts))
 	}
 }
 
@@ -482,6 +668,7 @@ func TestValidateAccessToken_Valid(t *testing.T) {
 
 	srv := oauth.New(oauth.Config{
 		Issuer:       ts.URL,
+		Resource:     ts.URL + "/mcp",
 		VerifyBearer: func(string) bool { return true },
 	}, store)
 
@@ -507,6 +694,7 @@ func TestValidateAccessToken_Expired(t *testing.T) {
 
 	srv := oauth.New(oauth.Config{
 		Issuer:       ts.URL,
+		Resource:     ts.URL + "/mcp",
 		VerifyBearer: func(string) bool { return true },
 	}, store)
 
@@ -522,6 +710,7 @@ func TestValidateAccessToken_Unknown(t *testing.T) {
 
 	srv := oauth.New(oauth.Config{
 		Issuer:       ts.URL,
+		Resource:     ts.URL + "/mcp",
 		VerifyBearer: func(string) bool { return true },
 	}, store)
 
@@ -529,4 +718,18 @@ func TestValidateAccessToken_Unknown(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for unknown token, got nil")
 	}
+}
+
+func TestNew_PanicsOnEmptyResource(t *testing.T) {
+	store := testStore(t)
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("expected panic for empty Config.Resource, got none")
+		}
+	}()
+	oauth.New(oauth.Config{
+		Issuer:       "https://cms.example.com",
+		VerifyBearer: func(string) bool { return true },
+		// Resource omitted
+	}, store)
 }

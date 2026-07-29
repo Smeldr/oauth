@@ -44,6 +44,9 @@ type AuthCode struct {
 	Scope string
 	// CodeChallenge is BASE64URL(SHA256(code_verifier)) (S256 method).
 	CodeChallenge string
+	// Resource is the RFC 8707 resource indicator requested at /oauth/authorize.
+	// The token request's own resource parameter must match this value.
+	Resource string
 	// ExpiresAt is the UTC time after which this code must be rejected.
 	ExpiresAt time.Time
 }
@@ -56,6 +59,8 @@ type AccessToken struct {
 	ClientID string
 	// Scope is the space-separated scope string for this token.
 	Scope string
+	// Resource is the RFC 8707 resource this token is bound to (its audience).
+	Resource string
 	// ExpiresAt is the UTC time after which this token is invalid.
 	ExpiresAt time.Time
 }

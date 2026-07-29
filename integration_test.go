@@ -63,6 +63,7 @@ func TestFullFlow(t *testing.T) {
 
 	srv := oauth.New(oauth.Config{
 		Issuer:       ts.URL,
+		Resource:     ts.URL + "/mcp",
 		VerifyBearer: func(token string) bool { return token == "valid-forge-token" },
 		HTTPClient:   ts.Client(), // trusts the test TLS certificate
 	}, store)
@@ -74,6 +75,7 @@ func TestFullFlow(t *testing.T) {
 	challenge := base64.RawURLEncoding.EncodeToString(h[:])
 
 	// 2. GET /oauth/authorize → HTML form.
+	resource := ts.URL + "/mcp"
 	authParams := url.Values{
 		"response_type":         {"code"},
 		"client_id":             {ts.URL},
@@ -82,6 +84,7 @@ func TestFullFlow(t *testing.T) {
 		"state":                 {"state-xyz"},
 		"code_challenge":        {challenge},
 		"code_challenge_method": {"S256"},
+		"resource":              {resource},
 	}
 	getResp, err := ts.Client().Get(ts.URL + "/oauth/authorize?" + authParams.Encode())
 	if err != nil {
@@ -107,6 +110,7 @@ func TestFullFlow(t *testing.T) {
 		"code_challenge":        {challenge},
 		"code_challenge_method": {"S256"},
 		"bearer_token":          {"valid-forge-token"},
+		"resource":              {resource},
 	}
 	client := ts.Client()
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
@@ -135,6 +139,9 @@ func TestFullFlow(t *testing.T) {
 	if parsed.Query().Get("state") != "state-xyz" {
 		t.Errorf("state mismatch in Location: %q", location)
 	}
+	if parsed.Query().Get("iss") != ts.URL {
+		t.Errorf("iss = %q in Location, want %q (RFC 9207)", parsed.Query().Get("iss"), ts.URL)
+	}
 
 	// 5. POST /oauth/token — code exchange.
 	tokenResp, err := ts.Client().PostForm(ts.URL+"/oauth/token", url.Values{
@@ -143,6 +150,7 @@ func TestFullFlow(t *testing.T) {
 		"client_id":     {ts.URL},
 		"redirect_uri":  {ts.URL + "/callback"},
 		"code_verifier": {verifier},
+		"resource":      {resource},
 	})
 	if err != nil {
 		t.Fatalf("POST /oauth/token: %v", err)
@@ -173,6 +181,9 @@ func TestFullFlow(t *testing.T) {
 	if at.Scope != "mcp offline_access" {
 		t.Errorf("scope = %q, want %q", at.Scope, "mcp offline_access")
 	}
+	if at.Resource != resource {
+		t.Errorf("Resource = %q, want %q", at.Resource, resource)
+	}
 
 	// 7. Use the same (now deleted) code again → 400 invalid_grant.
 	expiredResp, err := ts.Client().PostForm(ts.URL+"/oauth/token", url.Values{
@@ -181,6 +192,7 @@ func TestFullFlow(t *testing.T) {
 		"client_id":     {ts.URL},
 		"redirect_uri":  {ts.URL + "/callback"},
 		"code_verifier": {verifier},
+		"resource":      {resource},
 	})
 	if err != nil {
 		t.Fatalf("POST /oauth/token (replay): %v", err)
@@ -200,6 +212,7 @@ func TestFullFlow_RefreshToken(t *testing.T) {
 
 	srv := oauth.New(oauth.Config{
 		Issuer:       "https://example.com",
+		Resource:     "https://example.com/mcp",
 		VerifyBearer: func(string) bool { return true },
 	}, store)
 

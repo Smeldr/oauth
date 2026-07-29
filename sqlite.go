@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS smeldr_oauth_codes (
     redirect_uri   TEXT NOT NULL,
     scope          TEXT NOT NULL,
     code_challenge TEXT NOT NULL,
+    resource       TEXT NOT NULL DEFAULT '',
     expires_at     INTEGER NOT NULL
 );
 
@@ -23,6 +24,7 @@ CREATE TABLE IF NOT EXISTS smeldr_oauth_tokens (
     token      TEXT PRIMARY KEY,
     client_id  TEXT NOT NULL,
     scope      TEXT NOT NULL,
+    resource   TEXT NOT NULL DEFAULT '',
     expires_at INTEGER NOT NULL
 );
 
@@ -52,6 +54,10 @@ func NewSQLiteStore(path string) (*SQLiteStore, error) {
 		db.Close()
 		return nil, fmt.Errorf("oauth: migrate tables: %w", err)
 	}
+	if err := migrateAddResourceColumn(context.Background(), db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("oauth: migrate resource column: %w", err)
+	}
 	if _, err := db.Exec(createTablesSQL); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("oauth: create tables: %w", err)
@@ -66,21 +72,21 @@ func (s *SQLiteStore) Close() error { return s.db.Close() }
 
 func (s *SQLiteStore) SaveCode(ctx context.Context, c AuthCode) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO smeldr_oauth_codes (code, client_id, redirect_uri, scope, code_challenge, expires_at)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
-		c.Code, c.ClientID, c.RedirectURI, c.Scope, c.CodeChallenge, c.ExpiresAt.Unix(),
+		`INSERT INTO smeldr_oauth_codes (code, client_id, redirect_uri, scope, code_challenge, resource, expires_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		c.Code, c.ClientID, c.RedirectURI, c.Scope, c.CodeChallenge, c.Resource, c.ExpiresAt.Unix(),
 	)
 	return err
 }
 
 func (s *SQLiteStore) GetCode(ctx context.Context, code string) (AuthCode, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT code, client_id, redirect_uri, scope, code_challenge, expires_at
+		`SELECT code, client_id, redirect_uri, scope, code_challenge, resource, expires_at
 		 FROM smeldr_oauth_codes WHERE code = ?`, code,
 	)
 	var c AuthCode
 	var expiresUnix int64
-	if err := row.Scan(&c.Code, &c.ClientID, &c.RedirectURI, &c.Scope, &c.CodeChallenge, &expiresUnix); err != nil {
+	if err := row.Scan(&c.Code, &c.ClientID, &c.RedirectURI, &c.Scope, &c.CodeChallenge, &c.Resource, &expiresUnix); err != nil {
 		if err == sql.ErrNoRows {
 			return AuthCode{}, ErrCodeNotFound
 		}
@@ -99,21 +105,21 @@ func (s *SQLiteStore) DeleteCode(ctx context.Context, code string) error {
 
 func (s *SQLiteStore) SaveToken(ctx context.Context, t AccessToken) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO smeldr_oauth_tokens (token, client_id, scope, expires_at)
-		 VALUES (?, ?, ?, ?)`,
-		t.Token, t.ClientID, t.Scope, t.ExpiresAt.Unix(),
+		`INSERT INTO smeldr_oauth_tokens (token, client_id, scope, resource, expires_at)
+		 VALUES (?, ?, ?, ?, ?)`,
+		t.Token, t.ClientID, t.Scope, t.Resource, t.ExpiresAt.Unix(),
 	)
 	return err
 }
 
 func (s *SQLiteStore) GetToken(ctx context.Context, token string) (AccessToken, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT token, client_id, scope, expires_at
+		`SELECT token, client_id, scope, resource, expires_at
 		 FROM smeldr_oauth_tokens WHERE token = ?`, token,
 	)
 	var t AccessToken
 	var expiresUnix int64
-	if err := row.Scan(&t.Token, &t.ClientID, &t.Scope, &expiresUnix); err != nil {
+	if err := row.Scan(&t.Token, &t.ClientID, &t.Scope, &t.Resource, &expiresUnix); err != nil {
 		if err == sql.ErrNoRows {
 			return AccessToken{}, ErrTokenNotFound
 		}

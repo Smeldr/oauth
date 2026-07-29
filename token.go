@@ -37,8 +37,9 @@ func (s *Server) handleCodeExchange(w http.ResponseWriter, r *http.Request) {
 	clientID := r.FormValue("client_id")
 	redirectURI := r.FormValue("redirect_uri")
 	codeVerifier := r.FormValue("code_verifier")
+	resource := r.FormValue("resource")
 
-	if code == "" || clientID == "" || redirectURI == "" || codeVerifier == "" {
+	if code == "" || clientID == "" || redirectURI == "" || codeVerifier == "" || resource == "" {
 		writeTokenError(w, "invalid_request", "missing required parameter")
 		return
 	}
@@ -78,6 +79,10 @@ func (s *Server) handleCodeExchange(w http.ResponseWriter, r *http.Request) {
 		writeTokenError(w, "invalid_grant", "redirect_uri mismatch")
 		return
 	}
+	if stored.Resource != resource {
+		writeTokenError(w, "invalid_target", "resource does not match authorization request")
+		return
+	}
 
 	accessToken, err := newToken(32)
 	if err != nil {
@@ -90,6 +95,7 @@ func (s *Server) handleCodeExchange(w http.ResponseWriter, r *http.Request) {
 		Token:     accessToken,
 		ClientID:  clientID,
 		Scope:     stored.Scope,
+		Resource:  stored.Resource,
 		ExpiresAt: s.now().Add(ttl),
 	}
 	if err := s.store.SaveToken(ctx, at); err != nil {
@@ -167,6 +173,7 @@ func (s *Server) handleRefreshToken(w http.ResponseWriter, r *http.Request) {
 		Token:     accessToken,
 		ClientID:  clientID,
 		Scope:     stored.Scope,
+		Resource:  s.cfg.Resource,
 		ExpiresAt: s.now().Add(ttl),
 	}
 	if err := s.store.SaveToken(ctx, at); err != nil {

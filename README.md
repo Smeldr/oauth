@@ -3,7 +3,7 @@
 OAuth 2.1 authorization server for remote MCP servers.
 
 [![Go Reference](https://pkg.go.dev/badge/smeldr.dev/oauth.svg)](https://pkg.go.dev/smeldr.dev/oauth)
-**v0.2.0 — MIT license.**
+**v0.4.0 — MIT license.**
 
 ---
 
@@ -16,6 +16,8 @@ servers; smeldr.dev/oauth provides the server-side implementation.
 
 - **OAuth 2.1** (draft-15): PKCE mandatory, no implicit flow, no ROPC
 - **RFC 8414**: Authorization Server Metadata
+- **RFC 8707**: Resource Indicators — audience-bound tokens via `Config.Resource`
+- **RFC 9207**: Authorization Server Issuer Identification — `iss` on every redirect
 - **RFC 9728**: Protected Resource Metadata (via `smeldr.dev/mcp`)
 - **CIMD**: Client ID Metadata Documents — stateless client validation
 
@@ -63,7 +65,8 @@ func main() {
     }
 
     oauthSrv := oauth.New(oauth.Config{
-        Issuer: "https://cms.example.com",
+        Issuer:   "https://cms.example.com",
+        Resource: "https://cms.example.com/mcp", // must match smeldr.dev/mcp's own resource identifier
         VerifyBearer: func(token string) bool {
             // Validate Smeldr bearer token using smeldr.VerifyTokenString (v1.25.0+).
             _, ok := smeldr.VerifyTokenString(token, app.Secret(), app.TokenStore())

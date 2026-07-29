@@ -58,6 +58,7 @@ var authorizeForm = template.Must(template.New("authorize").Parse(`<!DOCTYPE htm
     <input type="hidden" name="state"                  value="{{.State}}">
     <input type="hidden" name="code_challenge"         value="{{.CodeChallenge}}">
     <input type="hidden" name="code_challenge_method"  value="{{.CodeChallengeMethod}}">
+    <input type="hidden" name="resource"               value="{{.Resource}}">
     <label for="bearer_token">Smeldr Bearer Token</label>
     <input type="password" id="bearer_token" name="bearer_token"
       placeholder="Paste your Smeldr bearer token" autocomplete="off" required>
@@ -78,6 +79,7 @@ type authorizeParams struct {
 	State               string
 	CodeChallenge       string
 	CodeChallengeMethod string
+	Resource            string
 }
 
 // authorizeFormData is the data passed to the authorizeForm template.
@@ -90,7 +92,11 @@ type authorizeFormData struct {
 // parseAuthorizeParams extracts and validates the required OAuth 2.1
 // authorization parameters from the request. Returns an error string
 // suitable for user display, or empty string on success.
-func parseAuthorizeParams(r *http.Request) (authorizeParams, string) {
+//
+// resource is validated against s.cfg.Resource (RFC 8707 — Resource
+// Indicators): the client must request the exact resource this authorization
+// server is paired with.
+func (s *Server) parseAuthorizeParams(r *http.Request) (authorizeParams, string) {
 	p := authorizeParams{
 		ResponseType:        r.FormValue("response_type"),
 		ClientID:            r.FormValue("client_id"),
@@ -99,6 +105,7 @@ func parseAuthorizeParams(r *http.Request) (authorizeParams, string) {
 		State:               r.FormValue("state"),
 		CodeChallenge:       r.FormValue("code_challenge"),
 		CodeChallengeMethod: r.FormValue("code_challenge_method"),
+		Resource:            r.FormValue("resource"),
 	}
 
 	if p.ResponseType != "code" {
@@ -119,6 +126,12 @@ func parseAuthorizeParams(r *http.Request) (authorizeParams, string) {
 	if p.CodeChallengeMethod != "S256" {
 		return p, "unsupported code_challenge_method: must be \"S256\""
 	}
+	if p.Resource == "" {
+		return p, "missing resource"
+	}
+	if p.Resource != s.cfg.Resource {
+		return p, "resource is not a valid target for this authorization server"
+	}
 	return p, ""
 }
 
@@ -128,7 +141,7 @@ func parseAuthorizeParams(r *http.Request) (authorizeParams, string) {
 func (s *Server) authorizeGetHandler(w http.ResponseWriter, r *http.Request) {
 	addr := r.RemoteAddr
 
-	p, errMsg := parseAuthorizeParams(r)
+	p, errMsg := s.parseAuthorizeParams(r)
 	if errMsg != "" {
 		http.Error(w, errMsg, http.StatusBadRequest)
 		return
@@ -174,7 +187,7 @@ func (s *Server) authorizePostHandler(w http.ResponseWriter, r *http.Request) {
 
 	addr := r.RemoteAddr
 
-	p, errMsg := parseAuthorizeParams(r)
+	p, errMsg := s.parseAuthorizeParams(r)
 	if errMsg != "" {
 		http.Error(w, errMsg, http.StatusBadRequest)
 		return
@@ -230,6 +243,7 @@ func (s *Server) authorizePostHandler(w http.ResponseWriter, r *http.Request) {
 		RedirectURI:   p.RedirectURI,
 		Scope:         p.Scope,
 		CodeChallenge: p.CodeChallenge,
+		Resource:      p.Resource,
 		ExpiresAt:     s.now().Add(s.cfg.AuthCodeTTL),
 	}
 	if err := s.store.SaveCode(r.Context(), authCode); err != nil {
@@ -248,7 +262,7 @@ func (s *Server) authorizePostHandler(w http.ResponseWriter, r *http.Request) {
 		"remote_addr", addr,
 	)
 
-	q := url.Values{"code": {code}}
+	q := url.Values{"code": {code}, "iss": {s.cfg.Issuer}}
 	if p.State != "" {
 		q.Set("state", p.State)
 	}

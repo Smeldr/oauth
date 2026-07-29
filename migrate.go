@@ -66,3 +66,62 @@ func migrateLegacyTableNames(ctx context.Context, db *sql.DB) error {
 	}
 	return tx.Commit()
 }
+
+// migrateAddResourceColumn adds the "resource" column (RFC 8707) to
+// smeldr_oauth_codes and smeldr_oauth_tokens on databases created before that
+// column existed. Called from [NewSQLiteStore] after [migrateLegacyTableNames]
+// and before the CREATE TABLE IF NOT EXISTS statements, so a fresh install
+// never reaches this function with a table missing the column.
+//
+// Only operates on SQLite databases (identified by the presence of
+// sqlite_master). For other databases it returns nil immediately.
+//
+// Idempotency: uses PRAGMA table_info to check whether the column already
+// exists before altering. A table that does not exist yet (fresh install) or
+// already has the column is skipped without error.
+func migrateAddResourceColumn(ctx context.Context, db *sql.DB) error {
+	var dummy int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master`).Scan(&dummy); err != nil {
+		return nil // not SQLite — skip silently
+	}
+
+	for _, table := range []string{"smeldr_oauth_codes", "smeldr_oauth_tokens"} {
+		var tableN int
+		if err := db.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?`, table,
+		).Scan(&tableN); err != nil || tableN == 0 {
+			continue // table doesn't exist yet — CREATE TABLE will include the column
+		}
+
+		rows, err := db.QueryContext(ctx, `PRAGMA table_info(`+table+`)`)
+		if err != nil {
+			return fmt.Errorf("oauth: migrate resource column: %s: table_info: %w", table, err)
+		}
+		hasResource := false
+		for rows.Next() {
+			var cid int
+			var name, colType string
+			var notNull, pk int
+			var dfltValue any
+			if err := rows.Scan(&cid, &name, &colType, &notNull, &dfltValue, &pk); err != nil {
+				rows.Close()
+				return fmt.Errorf("oauth: migrate resource column: %s: scan table_info: %w", table, err)
+			}
+			if name == "resource" {
+				hasResource = true
+			}
+		}
+		rows.Close()
+		if hasResource {
+			continue
+		}
+
+		slog.Info("oauth: adding resource column", "table", table)
+		if _, err := db.ExecContext(ctx,
+			`ALTER TABLE `+table+` ADD COLUMN resource TEXT NOT NULL DEFAULT ''`,
+		); err != nil {
+			return fmt.Errorf("oauth: migrate resource column: %s: %w", table, err)
+		}
+	}
+	return nil
+}

@@ -7,6 +7,50 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.4.0] — 2026-07-29
+
+### Added (breaking)
+
+- `Config.Resource` — the canonical resource identifier this authorization
+  server issues audience-bound tokens for (RFC 8707 — Resource Indicators for
+  OAuth 2.0). **Required — `New` now panics if empty**, mirroring the existing
+  `Issuer`/`VerifyBearer` required-field checks.
+- `resource` parameter now required at both `GET/POST /oauth/authorize` and
+  `POST /oauth/token`. Requests with a missing or mismatched resource are
+  rejected: `invalid_request` (missing) at `/oauth/authorize` (plain 400, same
+  style as every other validation failure in that handler) and at
+  `/oauth/token` (JSON body); `invalid_target` (RFC 8707's own error code) at
+  both endpoints when the resource doesn't match `Config.Resource` or the
+  authorization request's own resource.
+- `AuthCode.Resource` and `AccessToken.Resource` fields — persisted through
+  the full code → token flow. Refresh-token grants re-issue for the server's
+  single configured `Config.Resource` (this server only ever pairs with one
+  resource server; no client-supplied resource in that flow).
+- `iss` parameter now always included in the `/oauth/authorize` redirect
+  (RFC 9207 — Authorization Server Issuer Identification). Metadata gains
+  `authorization_response_iss_parameter_supported: true`.
+- SQLite schema: `resource` column added to `smeldr_oauth_codes` and
+  `smeldr_oauth_tokens`. Existing databases are migrated automatically at
+  startup via an idempotent `ALTER TABLE ... ADD COLUMN` pass (same pattern as
+  the v0.3.0 table-rename migration), so no action is required for existing
+  installs beyond adding `Config.Resource`.
+
+### Migration from v0.3.x
+
+Add `Resource` to your `oauth.Config` — it must match the `resource` field
+your paired `smeldr.dev/mcp` instance serves at
+`/.well-known/oauth-protected-resource` (typically `<base-url>/mcp`):
+
+```go
+oauthSrv := oauth.New(oauth.Config{
+    Issuer:   "https://cms.example.com",
+    Resource: "https://cms.example.com/mcp",
+    VerifyBearer: ...,
+}, store)
+```
+
+---
+
 ## [0.3.0] — 2026-06-11
 
 ### Changed
