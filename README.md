@@ -3,7 +3,7 @@
 OAuth 2.1 authorization server for remote MCP servers.
 
 [![Go Reference](https://pkg.go.dev/badge/smeldr.dev/oauth.svg)](https://pkg.go.dev/smeldr.dev/oauth)
-**v0.4.0 — MIT license.**
+**v0.4.3 — MIT license.**
 
 ---
 

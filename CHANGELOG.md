@@ -7,6 +7,34 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.4.3] — 2026-09-19
+
+### Fixed
+
+`fetchCIMD` (`cimd.go`) rejected ChatGPT's Reconnect flow: it appends a
+`?token_endpoint_auth_method=none` query suffix to the `client_id` URL it
+sends, but its own hosted CIMD document declares `client_id` as the bare
+URL without that suffix, so the byte-for-byte equality check at
+`fetchCIMD` always failed with "CIMD client_id mismatch." Fixed by
+comparing `client_id` values with their query string and fragment
+stripped (new unexported `canonicalClientID` helper) — the fetch target
+itself, and every downstream storage/comparison of the literal
+`client_id` string (auth codes, token-exchange equality checks), are
+unchanged; only the CIMD document's self-declaration check is relaxed.
+
+### Changed
+
+Real test coverage raised from 75.4% to 92.7% — new tests for `cimd.go`,
+`revoke.go` (previously untested), `authorize.go`, `token.go`,
+`sqlite.go`, and `migrate.go`'s previously-unexercised branches. A small
+number of branches remain uncovered where triggering them deterministically
+would require an injectable entropy source or fragile OS-level I/O-failure
+simulation (`crypto/rand.Read` errors, low-level SQLite I/O errors after
+preconditions are already checked) — accepted as impractical rather than
+forced.
+
+---
+
 ## [0.4.2] — 2026-09-19
 
 ### Added

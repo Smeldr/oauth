@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -52,7 +53,7 @@ func (s *Server) fetchCIMD(clientID, redirectURI string) (*CIMDDoc, error) {
 		return nil, fmt.Errorf("oauth: CIMD parse %q: %w", clientID, err)
 	}
 
-	if doc.ClientID != clientID {
+	if canonicalClientID(doc.ClientID) != canonicalClientID(clientID) {
 		return nil, fmt.Errorf("oauth: CIMD client_id mismatch: got %q, want %q", doc.ClientID, clientID)
 	}
 
@@ -62,4 +63,21 @@ func (s *Server) fetchCIMD(clientID, redirectURI string) (*CIMDDoc, error) {
 		}
 	}
 	return nil, fmt.Errorf("oauth: redirect_uri %q not listed in CIMD for %q", redirectURI, clientID)
+}
+
+// canonicalClientID strips the query string and fragment from a client_id
+// URL for CIMD self-declaration comparison. A client may append query
+// parameters (e.g. ChatGPT's own token_endpoint_auth_method=none) to its
+// client_id without those parameters being part of the document's declared
+// identity — only fetchCIMD's own doc.ClientID equality check is relaxed
+// this way; the literal client_id string (query included) is still what
+// gets fetched, stored, and compared at token exchange.
+func canonicalClientID(clientID string) string {
+	u, err := url.Parse(clientID)
+	if err != nil {
+		return clientID
+	}
+	u.RawQuery = ""
+	u.Fragment = ""
+	return u.String()
 }

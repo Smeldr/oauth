@@ -118,6 +118,36 @@ func TestMigrateLegacyTableNames_idempotent(t *testing.T) {
 	}
 }
 
+func TestMigrateLegacyTableNames_destinationAlreadyExists(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	// Both the legacy source and the new destination already exist — the
+	// pair must be skipped (with a warning) rather than erroring, and the
+	// legacy table must survive untouched.
+	_, err = db.Exec(`
+		CREATE TABLE forge_oauth_codes (code TEXT PRIMARY KEY, client_id TEXT, redirect_uri TEXT, scope TEXT, code_challenge TEXT, expires_at INTEGER);
+		CREATE TABLE smeldr_oauth_codes (code TEXT PRIMARY KEY, client_id TEXT, redirect_uri TEXT, scope TEXT, code_challenge TEXT, resource TEXT NOT NULL DEFAULT '', expires_at INTEGER);
+	`)
+	if err != nil {
+		t.Fatalf("create tables: %v", err)
+	}
+
+	if err := migrateLegacyTableNames(context.Background(), db); err != nil {
+		t.Fatalf("migrateLegacyTableNames: %v", err)
+	}
+
+	if !tableExists(t, db, "forge_oauth_codes") {
+		t.Error("expected legacy table forge_oauth_codes to survive when destination already exists")
+	}
+	if !tableExists(t, db, "smeldr_oauth_codes") {
+		t.Error("expected smeldr_oauth_codes to still exist")
+	}
+}
+
 func TestMigrateAddResourceColumn_freshDB(t *testing.T) {
 	store, err := NewSQLiteStore(":memory:")
 	if err != nil {
