@@ -7,6 +7,46 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.5.0] — 2026-09-19
+
+### Added
+
+Dynamic Client Registration (RFC 7591), T103: `POST /oauth/register` lets a
+client that can't host a CIMD document register once and receive an opaque
+`client_id` (`"dcr_"` + 32 hex chars) instead. Public clients only — this
+server has never supported confidential clients
+(`token_endpoint_auth_methods_supported` is `"none"` only), so a
+`token_endpoint_auth_method` other than `"none"` is rejected, and no
+`client_secret` is ever issued.
+
+New exported API: `RegisteredClient`, `RegistrationStore` (the opt-in
+interface a `Store` implements to support DCR — `SQLiteStore` does),
+`MaxRegisteredClients` (var, default 10000 — a hard cap on registration
+count, since an unauthenticated `POST /oauth/register` has no other
+resource-exhaustion guard: unlike every other stateful record in this
+store, a `RegisteredClient` row carries no `ExpiresAt` and is meant to
+persist indefinitely per RFC 7591's own model), `ErrRegisteredClientNotFound`.
+
+`GET`/`POST /oauth/authorize` now resolve a client via either CIMD (an
+`https://` `client_id`) or a registered client (a `"dcr_"`-prefixed
+`client_id`) — `cimd.go` itself is unchanged; a new `resolveClient` wraps
+both paths. `POST /oauth/register` and the discovery document's
+`registration_endpoint` field are only present when the configured `Store`
+implements `RegistrationStore`, so an existing custom `Store` keeps
+compiling and behaving exactly as it did before this release.
+
+New table: `smeldr_oauth_registered_clients`.
+
+### Fixed
+
+Two pre-existing `README.md` staleness items noticed while updating it for
+this release, fixed in the same commit: the Endpoints table was missing
+`POST /oauth/revoke` (shipped earlier, never documented), and the Storage
+table still named the tables by their pre-v0.3.0 `forge_oauth_*` names
+instead of the `smeldr_oauth_*` names they were renamed to.
+
+---
+
 ## [0.4.3] — 2026-09-19
 
 ### Fixed

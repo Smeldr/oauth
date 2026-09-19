@@ -1,7 +1,8 @@
 // Package oauth implements an OAuth 2.1 authorization server for remote
 // MCP servers. It supports the authorization code flow with mandatory PKCE
-// (S256), stateless client validation via Client ID Metadata Documents (CIMD),
-// and optional refresh tokens via the offline_access scope.
+// (S256), client validation via Client ID Metadata Documents (CIMD) or
+// Dynamic Client Registration (RFC 7591), and optional refresh tokens via
+// the offline_access scope.
 //
 // # Standards
 //
@@ -9,7 +10,11 @@
 //   - RFC 8414: Authorization Server Metadata
 //   - RFC 8707: Resource Indicators — audience-bound tokens via Config.Resource
 //   - RFC 9207: Authorization Server Issuer Identification — iss on every redirect
-//   - CIMD: stateless client validation by fetching the client_id URL
+//   - RFC 7591: Dynamic Client Registration — opt-in fallback for clients that
+//     can't host a CIMD document; available when the configured Store
+//     implements RegistrationStore (SQLiteStore does)
+//   - CIMD: client validation by fetching the client_id URL — no registration
+//     required for CIMD-capable clients
 //
 // # Quick start
 //

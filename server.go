@@ -18,6 +18,9 @@ var (
 	ErrCodeNotFound = errors.New("oauth: authorization code not found")
 	// ErrRefreshTokenNotFound is returned by [Store.GetRefreshToken] when the token does not exist.
 	ErrRefreshTokenNotFound = errors.New("oauth: refresh token not found")
+	// ErrRegisteredClientNotFound is returned by [RegistrationStore.GetRegisteredClient]
+	// when the client_id does not exist.
+	ErrRegisteredClientNotFound = errors.New("oauth: registered client not found")
 )
 
 // Config holds the configuration for the OAuth 2.1 authorization server.
@@ -107,6 +110,10 @@ func New(cfg Config, store Store) *Server {
 //	POST /oauth/authorize                          — form submission
 //	POST /oauth/token                              — code exchange and token refresh
 //	POST /oauth/revoke                             — RFC 7009 token revocation
+//	POST /oauth/register                           — RFC 7591 Dynamic Client
+//	                                                  Registration (only when
+//	                                                  the configured Store
+//	                                                  implements [RegistrationStore])
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /.well-known/oauth-authorization-server", s.metadataHandler)
@@ -114,6 +121,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /oauth/authorize", s.authorizePostHandler)
 	mux.HandleFunc("POST /oauth/token", s.tokenHandler)
 	mux.HandleFunc("POST /oauth/revoke", s.revokeHandler)
+	if _, ok := s.store.(RegistrationStore); ok {
+		mux.HandleFunc("POST /oauth/register", s.registerHandler)
+	}
 	return mux
 }
 

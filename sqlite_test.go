@@ -115,6 +115,74 @@ func TestGetToken_ScanError(t *testing.T) {
 	}
 }
 
+func TestRegisteredClient_RoundTrip(t *testing.T) {
+	store, err := NewSQLiteStore(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+	c := RegisteredClient{
+		ClientID:     "dcr_roundtrip",
+		ClientName:   "Round Trip Client",
+		RedirectURIs: []string{"https://client.example.com/a", "https://client.example.com/b"},
+		CreatedAt:    time.Now().UTC().Truncate(time.Second),
+	}
+	if err := store.SaveRegisteredClient(ctx, c); err != nil {
+		t.Fatalf("SaveRegisteredClient: %v", err)
+	}
+	got, err := store.GetRegisteredClient(ctx, c.ClientID)
+	if err != nil {
+		t.Fatalf("GetRegisteredClient: %v", err)
+	}
+	if got.ClientName != c.ClientName || len(got.RedirectURIs) != 2 || !got.CreatedAt.Equal(c.CreatedAt) {
+		t.Errorf("GetRegisteredClient round-trip mismatch: got %+v, want %+v", got, c)
+	}
+}
+
+func TestGetRegisteredClient_NotFound(t *testing.T) {
+	store, err := NewSQLiteStore(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	if _, err := store.GetRegisteredClient(context.Background(), "dcr_nonexistent"); err != ErrRegisteredClientNotFound {
+		t.Errorf("GetRegisteredClient: err = %v, want ErrRegisteredClientNotFound", err)
+	}
+}
+
+func TestCountRegisteredClients(t *testing.T) {
+	store, err := NewSQLiteStore(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+	n, err := store.CountRegisteredClients(ctx)
+	if err != nil {
+		t.Fatalf("CountRegisteredClients: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("count = %d, want 0", n)
+	}
+
+	if err := store.SaveRegisteredClient(ctx, RegisteredClient{
+		ClientID: "dcr_count", ClientName: "Counted", RedirectURIs: []string{"https://x.example.com/cb"},
+	}); err != nil {
+		t.Fatalf("SaveRegisteredClient: %v", err)
+	}
+	n, err = store.CountRegisteredClients(ctx)
+	if err != nil {
+		t.Fatalf("CountRegisteredClients: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("count = %d, want 1", n)
+	}
+}
+
 func TestSQLiteStore_CodeRoundTrip(t *testing.T) {
 	store, err := NewSQLiteStore(":memory:")
 	if err != nil {

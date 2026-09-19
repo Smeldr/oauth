@@ -3,6 +3,7 @@ package oauth
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -32,6 +33,13 @@ CREATE TABLE IF NOT EXISTS smeldr_oauth_refresh_tokens (
     token     TEXT PRIMARY KEY,
     client_id TEXT NOT NULL,
     scope     TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS smeldr_oauth_registered_clients (
+    client_id     TEXT PRIMARY KEY,
+    client_name   TEXT NOT NULL,
+    redirect_uris TEXT NOT NULL,
+    created_at    INTEGER NOT NULL
 );
 `
 
@@ -156,4 +164,49 @@ func (s *SQLiteStore) GetRefreshToken(ctx context.Context, token string) (Refres
 func (s *SQLiteStore) DeleteRefreshToken(ctx context.Context, token string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM smeldr_oauth_refresh_tokens WHERE token = ?`, token)
 	return err
+}
+
+// — RegisteredClient (RegistrationStore) —
+
+func (s *SQLiteStore) SaveRegisteredClient(ctx context.Context, c RegisteredClient) error {
+	redirectURIs, err := json.Marshal(c.RedirectURIs)
+	if err != nil {
+		return fmt.Errorf("oauth: marshal redirect_uris: %w", err)
+	}
+	_, err = s.db.ExecContext(ctx,
+		`INSERT INTO smeldr_oauth_registered_clients (client_id, client_name, redirect_uris, created_at)
+		 VALUES (?, ?, ?, ?)`,
+		c.ClientID, c.ClientName, string(redirectURIs), c.CreatedAt.Unix(),
+	)
+	return err
+}
+
+func (s *SQLiteStore) GetRegisteredClient(ctx context.Context, clientID string) (RegisteredClient, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT client_id, client_name, redirect_uris, created_at
+		 FROM smeldr_oauth_registered_clients WHERE client_id = ?`, clientID,
+	)
+	var c RegisteredClient
+	var redirectURIs string
+	var createdUnix int64
+	if err := row.Scan(&c.ClientID, &c.ClientName, &redirectURIs, &createdUnix); err != nil {
+		if err == sql.ErrNoRows {
+			return RegisteredClient{}, ErrRegisteredClientNotFound
+		}
+		return RegisteredClient{}, err
+	}
+	if err := json.Unmarshal([]byte(redirectURIs), &c.RedirectURIs); err != nil {
+		return RegisteredClient{}, fmt.Errorf("oauth: unmarshal redirect_uris: %w", err)
+	}
+	c.CreatedAt = time.Unix(createdUnix, 0).UTC()
+	return c, nil
+}
+
+// CountRegisteredClients returns the total number of registered clients.
+// registerHandler calls this to enforce [MaxRegisteredClients] before
+// accepting a new registration.
+func (s *SQLiteStore) CountRegisteredClients(ctx context.Context) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM smeldr_oauth_registered_clients`).Scan(&n)
+	return n, err
 }

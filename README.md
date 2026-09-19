@@ -3,7 +3,7 @@
 OAuth 2.1 authorization server for remote MCP servers.
 
 [![Go Reference](https://pkg.go.dev/badge/smeldr.dev/oauth.svg)](https://pkg.go.dev/smeldr.dev/oauth)
-**v0.4.3 — MIT license.**
+**v0.5.0 — MIT license.**
 
 ---
 
@@ -19,11 +19,12 @@ servers; smeldr.dev/oauth provides the server-side implementation.
 - **RFC 8707**: Resource Indicators — audience-bound tokens via `Config.Resource`
 - **RFC 9207**: Authorization Server Issuer Identification — `iss` on every redirect
 - **RFC 9728**: Protected Resource Metadata (via `smeldr.dev/mcp`)
+- **RFC 7591**: Dynamic Client Registration — opt-in fallback for clients that can't host a CIMD document
 - **CIMD**: Client ID Metadata Documents — stateless client validation
 
 ## Features
 
-- Stateless client validation via CIMD (no client registration database)
+- Stateless client validation via CIMD (no registration required for CIMD-capable clients) — Dynamic Client Registration (RFC 7591) available as an opt-in fallback for clients that can't host one
 - PKCE S256 — mandatory for all authorization requests
 - Refresh tokens via `offline_access` scope (required for ChatGPT)
 - HTML authorization form — user pastes their Smeldr bearer token
@@ -87,6 +88,8 @@ func main() {
 | `GET` | `/oauth/authorize` | Authorization form |
 | `POST` | `/oauth/authorize` | Form submission |
 | `POST` | `/oauth/token` | Code exchange and token refresh |
+| `POST` | `/oauth/revoke` | RFC 7009 token revocation |
+| `POST` | `/oauth/register` | RFC 7591 Dynamic Client Registration (only when the configured `Store` implements `RegistrationStore`) |
 
 ## ChatGPT / ngrok runbook
 
@@ -105,13 +108,14 @@ To test end-to-end with ChatGPT Plus:
 
 ## Storage
 
-Three SQLite tables are created automatically by `NewSQLiteStore`:
+Four SQLite tables are created automatically by `NewSQLiteStore`:
 
 | Table | Purpose |
 |-------|---------|
-| `forge_oauth_codes` | Short-lived authorization codes (5 min default) |
-| `forge_oauth_tokens` | Access tokens (1 hour default) |
-| `forge_oauth_refresh_tokens` | Refresh tokens (no expiry in v1) |
+| `smeldr_oauth_codes` | Short-lived authorization codes (5 min default) |
+| `smeldr_oauth_tokens` | Access tokens (1 hour default) |
+| `smeldr_oauth_refresh_tokens` | Refresh tokens (no expiry in v1) |
+| `smeldr_oauth_registered_clients` | Dynamic Client Registration records (RFC 7591) — permanent, bounded by `MaxRegisteredClients` |
 
 ## License
 

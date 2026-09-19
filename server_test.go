@@ -119,6 +119,9 @@ func TestDiscovery(t *testing.T) {
 	if got := meta["authorization_response_iss_parameter_supported"]; got != true {
 		t.Errorf("authorization_response_iss_parameter_supported = %v, want true", got)
 	}
+	if got := meta["registration_endpoint"]; got != ts.URL+"/oauth/register" {
+		t.Errorf("registration_endpoint = %v, want %q (store implements RegistrationStore)", got, ts.URL+"/oauth/register")
+	}
 }
 
 func TestAuthorizeGet_RendersForm(t *testing.T) {

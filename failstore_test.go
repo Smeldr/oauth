@@ -17,9 +17,11 @@ import (
 // that a real SQLiteStore essentially never hits under test.
 type failStore struct {
 	*oauth.SQLiteStore
-	failSaveCode         bool
-	failSaveToken        bool
-	failSaveRefreshToken bool
+	failSaveCode               bool
+	failSaveToken              bool
+	failSaveRefreshToken       bool
+	failCountRegisteredClients bool
+	failSaveRegisteredClient   bool
 }
 
 var errForced = errors.New("oauth test: forced store failure")
@@ -43,6 +45,20 @@ func (f *failStore) SaveRefreshToken(ctx context.Context, t oauth.RefreshToken) 
 		return errForced
 	}
 	return f.SQLiteStore.SaveRefreshToken(ctx, t)
+}
+
+func (f *failStore) CountRegisteredClients(ctx context.Context) (int, error) {
+	if f.failCountRegisteredClients {
+		return 0, errForced
+	}
+	return f.SQLiteStore.CountRegisteredClients(ctx)
+}
+
+func (f *failStore) SaveRegisteredClient(ctx context.Context, c oauth.RegisteredClient) error {
+	if f.failSaveRegisteredClient {
+		return errForced
+	}
+	return f.SQLiteStore.SaveRegisteredClient(ctx, c)
 }
 
 // newFailTestServer mirrors newTestServer but is backed by a *failStore so

@@ -20,6 +20,9 @@ func (s *Server) metadataHandler(w http.ResponseWriter, r *http.Request) {
 		"client_id_metadata_document_supported":          true,
 		"authorization_response_iss_parameter_supported": true,
 	}
+	if _, ok := s.store.(RegistrationStore); ok {
+		meta["registration_endpoint"] = s.cfg.Issuer + "/oauth/register"
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(meta) //nolint:errcheck
 }

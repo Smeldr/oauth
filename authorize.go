@@ -1,6 +1,8 @@
 package oauth
 
 import (
+	"context"
+	"fmt"
 	"html/template"
 	"log/slog"
 	"net/http"
@@ -114,8 +116,8 @@ func (s *Server) parseAuthorizeParams(r *http.Request) (authorizeParams, string)
 	if p.ClientID == "" {
 		return p, "missing client_id"
 	}
-	if !strings.HasPrefix(p.ClientID, "https://") {
-		return p, "client_id must be an HTTPS URL"
+	if !strings.HasPrefix(p.ClientID, "https://") && !strings.HasPrefix(p.ClientID, "dcr_") {
+		return p, "client_id must be an HTTPS URL or a client_id issued by /oauth/register"
 	}
 	if p.RedirectURI == "" {
 		return p, "missing redirect_uri"
@@ -136,8 +138,8 @@ func (s *Server) parseAuthorizeParams(r *http.Request) (authorizeParams, string)
 }
 
 // authorizeGetHandler handles GET /oauth/authorize.
-// It validates the request parameters, fetches the CIMD document, and
-// renders the authorization form.
+// It validates the request parameters, resolves the client (CIMD or a
+// Dynamic Client Registration record), and renders the authorization form.
 func (s *Server) authorizeGetHandler(w http.ResponseWriter, r *http.Request) {
 	addr := r.RemoteAddr
 
@@ -147,9 +149,9 @@ func (s *Server) authorizeGetHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	doc, err := s.fetchCIMD(p.ClientID, p.RedirectURI)
+	info, err := s.resolveClient(r.Context(), p.ClientID, p.RedirectURI)
 	if err != nil {
-		slog.Warn("oauth: CIMD fetch failed",
+		slog.Warn("oauth: client resolution failed",
 			"client_id", p.ClientID,
 			"remote_addr", addr,
 			"error", err,
@@ -160,7 +162,7 @@ func (s *Server) authorizeGetHandler(w http.ResponseWriter, r *http.Request) {
 
 	data := authorizeFormData{
 		authorizeParams: p,
-		ClientName:      doc.ClientName,
+		ClientName:      info.ClientName,
 	}
 	if data.ClientName == "" {
 		data.ClientName = p.ClientID
@@ -177,8 +179,9 @@ func (s *Server) authorizeGetHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // authorizePostHandler handles POST /oauth/authorize (form submission).
-// It re-validates the request, re-fetches the CIMD document, verifies the
-// bearer token, generates an authorization code, and redirects.
+// It re-validates the request, re-resolves the client (CIMD or a Dynamic
+// Client Registration record), verifies the bearer token, generates an
+// authorization code, and redirects.
 func (s *Server) authorizePostHandler(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "invalid form data", http.StatusBadRequest)
@@ -193,9 +196,9 @@ func (s *Server) authorizePostHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	doc, err := s.fetchCIMD(p.ClientID, p.RedirectURI)
+	info, err := s.resolveClient(r.Context(), p.ClientID, p.RedirectURI)
 	if err != nil {
-		slog.Warn("oauth: CIMD fetch failed",
+		slog.Warn("oauth: client resolution failed",
 			"client_id", p.ClientID,
 			"remote_addr", addr,
 			"error", err,
@@ -211,7 +214,7 @@ func (s *Server) authorizePostHandler(w http.ResponseWriter, r *http.Request) {
 			"remote_addr", addr,
 		)
 		// Re-render form with error message (never disclose why it failed).
-		clientName := doc.ClientName
+		clientName := info.ClientName
 		if clientName == "" {
 			clientName = p.ClientID
 		}
@@ -267,4 +270,42 @@ func (s *Server) authorizePostHandler(w http.ResponseWriter, r *http.Request) {
 		q.Set("state", p.State)
 	}
 	http.Redirect(w, r, p.RedirectURI+"?"+q.Encode(), http.StatusFound)
+}
+
+// clientInfo is the minimal client identity resolved from either a CIMD
+// document (client_id is an HTTPS URL) or a Dynamic Client Registration
+// record (client_id is an opaque "dcr_"-prefixed token).
+type clientInfo struct {
+	ClientName   string
+	RedirectURIs []string
+}
+
+// resolveClient resolves the identity of clientID and confirms redirectURI
+// is one it's authorized to use — via a live CIMD fetch when clientID is an
+// HTTPS URL, or a [RegistrationStore] lookup otherwise. cimd.go's own
+// fetchCIMD is untouched; this only adds the second, registration-backed
+// path alongside it.
+func (s *Server) resolveClient(ctx context.Context, clientID, redirectURI string) (clientInfo, error) {
+	if strings.HasPrefix(clientID, "https://") {
+		doc, err := s.fetchCIMD(clientID, redirectURI)
+		if err != nil {
+			return clientInfo{}, err
+		}
+		return clientInfo{ClientName: doc.ClientName, RedirectURIs: doc.RedirectURIs}, nil
+	}
+
+	rs, ok := s.store.(RegistrationStore)
+	if !ok {
+		return clientInfo{}, fmt.Errorf("oauth: unknown client_id %q", clientID)
+	}
+	rc, err := rs.GetRegisteredClient(ctx, clientID)
+	if err != nil {
+		return clientInfo{}, fmt.Errorf("oauth: registered client %q: %w", clientID, err)
+	}
+	for _, u := range rc.RedirectURIs {
+		if u == redirectURI {
+			return clientInfo{ClientName: rc.ClientName, RedirectURIs: rc.RedirectURIs}, nil
+		}
+	}
+	return clientInfo{}, fmt.Errorf("oauth: redirect_uri %q not registered for client %q", redirectURI, clientID)
 }
