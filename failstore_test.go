@@ -1,4 +1,4 @@
-﻿package oauth_test
+package oauth_test
 
 import (
 	"context"
