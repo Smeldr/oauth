@@ -117,6 +117,15 @@ Four SQLite tables are created automatically by `NewSQLiteStore`:
 | `smeldr_oauth_refresh_tokens` | Refresh tokens (no expiry in v1) |
 | `smeldr_oauth_registered_clients` | Dynamic Client Registration records (RFC 7591) — permanent, bounded by `MaxRegisteredClients` |
 
+**SQLite only, by design (D106).** smeldr.dev/oauth keeps its state in its own
+SQLite file, opened by `NewSQLiteStore`, never in the application's database.
+An application whose own database is Postgres can still use it as it is: the
+OAuth file is separate. A deployment that needs OAuth state on Postgres (or
+anywhere else) implements `oauth.Store`, and `oauth.RegistrationStore` for
+Dynamic Client Registration, and passes its store to `oauth.New(cfg, store)`.
+smeldr.dev/media and smeldr.dev/social, which do use the application's
+database, run on Postgres.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
