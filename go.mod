@@ -2,7 +2,7 @@ module smeldr.dev/oauth
 
 go 1.26.5
 
-toolchain go1.26.6
+toolchain go1.26.9
 
 require modernc.org/sqlite v1.50.1
 
