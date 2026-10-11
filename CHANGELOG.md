@@ -14,6 +14,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **`POST /oauth/register` bounds its own requests (A471, D97).** The endpoint is unauthenticated and every registration is stored permanently, but until now a single request had no bound: the body, the number and length of `redirect_uris` and the length of `client_name` were unlimited, and any string was accepted as a redirect URI. The new tunable variables are `MaxRegistrationBodyBytes` (64 KiB, 413 beyond it), `MaxRedirectURIs` (10), `MaxRedirectURILength` (2048) and `MaxClientNameLength` (256). A redirect URI must now be absolute without a fragment, and `https` with a host, `http` to a loopback host, or a reverse-domain private-use scheme (RFC 8252); `javascript:`, `data:`, `vbscript:` and `file:` are refused in any case. A refused URI gets 400 `invalid_redirect_uri`. The checks run before the store is touched.
 - Registrations that were accepted before and break a new rule are now refused. Clients already registered keep their records.
 
+### Internal
+
+- Test coverage from 93.4% to 99.1% (A472). Error paths that cannot run were removed, not tested: `crypto/rand.Read` never returns an error since Go 1.24, so the internal `newToken` no longer returns one and its five callers lose a dead branch; `json.Marshal` of a `[]string` and `sql.Open` with the always-registered `sqlite` driver cannot fail either. No exported symbol or behaviour changes.
+
 ---
 
 ## [0.5.0] — 2026-09-19

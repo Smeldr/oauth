@@ -229,16 +229,7 @@ func (s *Server) authorizePostHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	code, err := newToken(32)
-	if err != nil {
-		slog.Warn("oauth: failed to generate auth code",
-			"client_id", p.ClientID,
-			"remote_addr", addr,
-			"error", err,
-		)
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
-	}
+	code := newToken(32)
 
 	authCode := AuthCode{
 		Code:          code,

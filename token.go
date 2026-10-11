@@ -84,11 +84,7 @@ func (s *Server) handleCodeExchange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	accessToken, err := newToken(32)
-	if err != nil {
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
-	}
+	accessToken := newToken(32)
 
 	ttl := s.cfg.AccessTokenTTL
 	at := AccessToken{
@@ -118,11 +114,7 @@ func (s *Server) handleCodeExchange(w http.ResponseWriter, r *http.Request) {
 
 	// Issue refresh token when offline_access scope is present.
 	if containsScope(stored.Scope, "offline_access") {
-		refreshToken, err := newToken(32)
-		if err != nil {
-			http.Error(w, "internal error", http.StatusInternalServerError)
-			return
-		}
+		refreshToken := newToken(32)
 		rt := RefreshToken{
 			Token:    refreshToken,
 			ClientID: clientID,
@@ -162,11 +154,7 @@ func (s *Server) handleRefreshToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	accessToken, err := newToken(32)
-	if err != nil {
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
-	}
+	accessToken := newToken(32)
 
 	ttl := s.cfg.AccessTokenTTL
 	at := AccessToken{

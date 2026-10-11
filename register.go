@@ -176,13 +176,7 @@ func (s *Server) registerHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	clientID, err := newToken(16)
-	if err != nil {
-		slog.Warn("oauth: register: failed to generate client_id", "error", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
-	}
-	clientID = "dcr_" + clientID
+	clientID := "dcr_" + newToken(16)
 
 	rc := RegisteredClient{
 		ClientID:     clientID,

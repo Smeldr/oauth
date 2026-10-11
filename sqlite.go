@@ -54,10 +54,11 @@ type SQLiteStore struct {
 // NewSQLiteStore opens (or creates) a SQLite database at path and initialises
 // the three OAuth tables. Use path ":memory:" for in-process testing.
 func NewSQLiteStore(path string) (*SQLiteStore, error) {
-	db, err := sql.Open("sqlite", path)
-	if err != nil {
-		return nil, fmt.Errorf("oauth: open sqlite %q: %w", path, err)
-	}
+	// sql.Open cannot fail here: "sqlite" is registered by this package's own
+	// import of modernc.org/sqlite, and that driver does not implement
+	// driver.DriverContext, so the DSN is not read until the first query. A
+	// bad path fails at that query (the migrations below).
+	db, _ := sql.Open("sqlite", path)
 	if err := migrateLegacyTableNames(context.Background(), db); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("oauth: migrate tables: %w", err)
@@ -169,11 +170,9 @@ func (s *SQLiteStore) DeleteRefreshToken(ctx context.Context, token string) erro
 // — RegisteredClient (RegistrationStore) —
 
 func (s *SQLiteStore) SaveRegisteredClient(ctx context.Context, c RegisteredClient) error {
-	redirectURIs, err := json.Marshal(c.RedirectURIs)
-	if err != nil {
-		return fmt.Errorf("oauth: marshal redirect_uris: %w", err)
-	}
-	_, err = s.db.ExecContext(ctx,
+	// encoding/json cannot fail on a []string, so the error is not checked.
+	redirectURIs, _ := json.Marshal(c.RedirectURIs)
+	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO smeldr_oauth_registered_clients (client_id, client_name, redirect_uris, created_at)
 		 VALUES (?, ?, ?, ?)`,
 		c.ClientID, c.ClientName, string(redirectURIs), c.CreatedAt.Unix(),

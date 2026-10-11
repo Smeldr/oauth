@@ -6,7 +6,6 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
-	"fmt"
 )
 
 // VerifyPKCE checks that BASE64URL(SHA256(codeVerifier)) equals codeChallenge.
@@ -19,12 +18,14 @@ func VerifyPKCE(codeVerifier, codeChallenge string) bool {
 }
 
 // newToken generates n cryptographically random bytes and returns them
-// as a lowercase hex string. Used for auth codes, access tokens, and
-// refresh tokens.
-func newToken(n int) (string, error) {
+// as a lowercase hex string. Used for auth codes, access tokens, refresh
+// tokens and registered client IDs.
+//
+// It cannot fail: since Go 1.24, crypto/rand.Read "never returns an error,
+// and always fills b entirely", and crashes the program if the operating
+// system's source fails. So there is no error to return.
+func newToken(n int) string {
 	b := make([]byte, n)
-	if _, err := rand.Read(b); err != nil {
-		return "", fmt.Errorf("oauth: generate token: %w", err)
-	}
-	return hex.EncodeToString(b), nil
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
 }
