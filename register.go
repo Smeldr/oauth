@@ -3,8 +3,13 @@ package oauth
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 )
 
@@ -15,6 +20,23 @@ import (
 // ExpiresAt; RegisteredClient does not, by RFC 7591's own permanent-
 // registration model, so a count ceiling substitutes for a TTL here).
 var MaxRegisteredClients = 10000
+
+// Per-request bounds on POST /oauth/register. The endpoint is
+// unauthenticated and every accepted registration is stored permanently, so
+// the server bounds each request itself, whatever middleware the App adds.
+// Each is a variable, like [MaxRegisteredClients], so a deployment can tune it.
+var (
+	// MaxRegistrationBodyBytes caps the request body. A larger body is
+	// refused with 413 before it is decoded.
+	MaxRegistrationBodyBytes int64 = 64 << 10
+	// MaxRedirectURIs caps how many redirect_uris one client may register.
+	MaxRedirectURIs = 10
+	// MaxRedirectURILength caps the length in bytes of each redirect URI.
+	MaxRedirectURILength = 2048
+	// MaxClientNameLength caps the length in bytes of client_name, which is
+	// shown on the authorization form.
+	MaxClientNameLength = 256
+)
 
 // RegisteredClient is a client registered via Dynamic Client Registration
 // (RFC 7591). Unlike CIMD, its identity is opaque (server-issued), not a
@@ -87,13 +109,37 @@ func (s *Server) registerHandler(w http.ResponseWriter, r *http.Request) {
 	rs := s.store.(RegistrationStore)
 
 	var req registerRequest
+	r.Body = http.MaxBytesReader(w, r.Body, MaxRegistrationBodyBytes)
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			writeRegisterError(w, http.StatusRequestEntityTooLarge, "invalid_client_metadata",
+				fmt.Sprintf("request body is larger than %d bytes", MaxRegistrationBodyBytes))
+			return
+		}
 		writeRegisterError(w, http.StatusBadRequest, "invalid_client_metadata", "malformed JSON body")
 		return
 	}
 
 	if len(req.RedirectURIs) == 0 {
 		writeRegisterError(w, http.StatusBadRequest, "invalid_client_metadata", "redirect_uris is required and must be non-empty")
+		return
+	}
+	if len(req.RedirectURIs) > MaxRedirectURIs {
+		writeRegisterError(w, http.StatusBadRequest, "invalid_redirect_uri",
+			fmt.Sprintf("at most %d redirect_uris may be registered", MaxRedirectURIs))
+		return
+	}
+	for i, u := range req.RedirectURIs {
+		if reason := checkRedirectURI(u); reason != "" {
+			writeRegisterError(w, http.StatusBadRequest, "invalid_redirect_uri",
+				fmt.Sprintf("redirect_uris[%d] %s", i, reason))
+			return
+		}
+	}
+	if len(req.ClientName) > MaxClientNameLength {
+		writeRegisterError(w, http.StatusBadRequest, "invalid_client_metadata",
+			fmt.Sprintf("client_name is longer than %d bytes", MaxClientNameLength))
 		return
 	}
 	if req.TokenEndpointAuthMethod != "" && req.TokenEndpointAuthMethod != "none" {
@@ -163,6 +209,49 @@ func (s *Server) registerHandler(w http.ResponseWriter, r *http.Request) {
 		GrantTypes:              grantTypes,
 		ResponseTypes:           responseTypes,
 	})
+}
+
+// refusedRedirectSchemes are never a redirect target, whatever their form.
+var refusedRedirectSchemes = map[string]bool{"javascript": true, "data": true, "vbscript": true, "file": true}
+
+// checkRedirectURI returns why u cannot be registered as a redirect URI, or ""
+// when it can. A redirect URI must be absolute and have no fragment (RFC 6749
+// section 3.1.2), and be one of: https with a host; http to a loopback host
+// (127.0.0.1, ::1 or localhost, RFC 8252 section 7.3); or a private-use scheme
+// in reverse-domain form such as com.example.app:/cb (RFC 8252 section 7.1).
+func checkRedirectURI(u string) string {
+	if len(u) > MaxRedirectURILength {
+		return fmt.Sprintf("is longer than %d bytes", MaxRedirectURILength)
+	}
+	p, err := url.Parse(u)
+	if err != nil {
+		return "is not a valid URI"
+	}
+	if p.Scheme == "" {
+		return "must be an absolute URI"
+	}
+	if strings.Contains(u, "#") {
+		return "must not have a fragment"
+	}
+	scheme := strings.ToLower(p.Scheme)
+	switch {
+	case refusedRedirectSchemes[scheme]:
+		return "uses a scheme that is never a redirect target"
+	case scheme == "https":
+		if p.Host == "" {
+			return "must name a host"
+		}
+	case scheme == "http":
+		host := p.Hostname()
+		if ip := net.ParseIP(host); host != "localhost" && (ip == nil || !ip.IsLoopback()) {
+			return "may use http only for a loopback host (127.0.0.1, ::1 or localhost)"
+		}
+	case strings.Contains(scheme, "."):
+		// A private-use scheme for a native app, in reverse-domain form.
+	default:
+		return "must be https, loopback http, or a reverse-domain private-use scheme"
+	}
+	return ""
 }
 
 // writeRegisterError writes an RFC 7591 §3.2.2 JSON error response.

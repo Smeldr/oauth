@@ -91,6 +91,21 @@ func main() {
 | `POST` | `/oauth/revoke` | RFC 7009 token revocation |
 | `POST` | `/oauth/register` | RFC 7591 Dynamic Client Registration (only when the configured `Store` implements `RegistrationStore`) |
 
+`POST /oauth/register` is unauthenticated, and every registration is stored permanently, so the server bounds each request itself (v0.6.0). Each bound is a package variable you can tune:
+
+- `MaxRegistrationBodyBytes`: 64 KiB. A larger body is refused with 413.
+- `MaxRedirectURIs`: 10.
+- `MaxRedirectURILength`: 2048 bytes.
+- `MaxClientNameLength`: 256 bytes.
+- `MaxRegisteredClients`: 10000 in total, then 429.
+
+A redirect URI must be absolute, with no fragment, and must be one of:
+- `https` with a host;
+- `http` to a loopback host (`127.0.0.1`, `::1` or `localhost`);
+- a reverse-domain private-use scheme such as `com.example.app:/cb`.
+
+`javascript:`, `data:`, `vbscript:` and `file:` are always refused. A refused URI gets 400 `invalid_redirect_uri`. Rate limiting stays the App's job: wrap the routes with `smeldr.RateLimit` or similar.
+
 ## ChatGPT / ngrok runbook
 
 To test end-to-end with ChatGPT Plus:
