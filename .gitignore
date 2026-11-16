@@ -19,3 +19,6 @@ go.work.sum
 *.db
 *.db-shm
 *.db-wal
+
+# Test coverage profiles (ci.yml runs go test -coverprofile=coverage.out)
+coverage.out
