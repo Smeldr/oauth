@@ -9,6 +9,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+---
+
+## [0.7.0] - 2026-11-16
+
 ### Security
 
 - **An access token stands for exactly the Smeldr token pasted at sign-in (core T1287, D195).** Before, the access token kept nothing of the pasted token but that it was valid, and the client's scope set its role. Now the code, the access token and the refresh token keep the pasted token's identity and stored fingerprint, never its value. smeldr.dev/mcp acts with that token's identity, class and rights.
