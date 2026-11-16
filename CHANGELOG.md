@@ -20,7 +20,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- The form asks for the token made for whoever will use the client, and says that pasting your own makes the client act as you. The wording is a placeholder until brand words it.
+- The form says, above the field, that the client acts with the token pasted and has no rights of its own, and that pasting your own token makes it act as you. The field asks for the token made for whoever or whatever will use the client, and says the client stops when that token is revoked or expires. The form no longer shows the client's scope, which gives no rights, and no longer says "bearer". The two refusals are reworded the same way (core T1290).
 - The code, token and refresh token tables get `user_id` and `token_id` columns, and the refresh token table an `expires_at` column, added at open.
 
 ---

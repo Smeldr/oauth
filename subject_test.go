@@ -150,8 +150,9 @@ func TestSubject_FormRefusals(t *testing.T) {
 	if status, _, body := f.authorize("good", "mcp:admin"); status != http.StatusFound {
 		t.Errorf("mcp:admin = %d %s; want a sign-in", status, body)
 	}
-	if status, _, _ := f.authorize("bad", "mcp"); status != http.StatusUnauthorized {
-		t.Errorf("a bad token = %d", status)
+	if status, _, body := f.authorize("bad", "mcp"); status != http.StatusUnauthorized ||
+		!strings.Contains(body, "This token is not valid. Check that it is whole, and not revoked or expired.") {
+		t.Errorf("a bad token = %d %s", status, body)
 	}
 	f.subject.UserID = ""
 	if status, _, _ := f.authorize("good", "mcp"); status != http.StatusUnauthorized {
@@ -180,7 +181,7 @@ func TestSubject_OldWiringRefusesAtTheForm(t *testing.T) {
 	json.NewDecoder(resp.Body).Decode(&reg) //nolint:errcheck
 	resp.Body.Close()
 	f.clientID, _ = reg["client_id"].(string)
-	if status, code, body := f.authorize("anything", "mcp"); status != http.StatusServiceUnavailable || code != "" || !strings.Contains(body, "not set up to say who an access token acts for") {
+	if status, code, body := f.authorize("anything", "mcp"); status != http.StatusServiceUnavailable || code != "" || !strings.Contains(body, "This server cannot connect a client yet. Ask its operator to update Smeldr.") {
 		t.Errorf("old wiring = %d %q %s", status, code, body)
 	}
 }

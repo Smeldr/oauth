@@ -162,6 +162,23 @@ func TestAuthorizeGet_RendersForm(t *testing.T) {
 	if !strings.Contains(string(body), "Test Client") {
 		t.Error("form does not show client_name")
 	}
+	// Brand's words (core T1290), the own-token warning before the field;
+	// the scope gives no rights, so the form names none (D195).
+	page := string(body)
+	warn := strings.Index(page, "This client acts with the token you paste, and has no rights of its own. If you paste your own token, it acts as you.")
+	field := strings.Index(page, `id="bearer_token"`)
+	if warn < 0 || field < 0 || warn > field {
+		t.Errorf("the own-token warning is missing or not above the field (%d, %d)", warn, field)
+	}
+	for _, want := range []string{"Smeldr token for this client", `placeholder="Paste a Smeldr token"`,
+		"Use the token made for whoever or whatever will use this client. If the token is revoked or expires, the client stops."} {
+		if !strings.Contains(page, want) {
+			t.Errorf("form lacks %q", want)
+		}
+	}
+	if strings.Contains(page, "with scope") || strings.Contains(strings.ToLower(page), "bearer token") {
+		t.Error("form still names the scope or a bearer token")
+	}
 }
 
 func TestAuthorizeGet_InvalidClientIDHTTP(t *testing.T) {

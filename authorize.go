@@ -39,8 +39,6 @@ var authorizeForm = template.Must(template.New("authorize").Parse(`<!DOCTYPE htm
     font-size: 1rem; font-weight: 600; cursor: pointer; }
   button:hover { background: #0060d8; }
   .error { color: #c00; font-size: 0.875rem; margin-bottom: 1rem; }
-  .scope { font-family: monospace; background: #f0f0f0; padding: 0.125rem 0.375rem;
-    border-radius: 3px; }
   .footer { margin-top: 1.5rem; font-size: 0.75rem; color: #888; text-align: center; }
 </style>
 </head>
@@ -48,8 +46,7 @@ var authorizeForm = template.Must(template.New("authorize").Parse(`<!DOCTYPE htm
 <div class="card">
   <h1>Authorize Access</h1>
   <p class="meta">
-    <strong>{{.ClientName}}</strong> is requesting access to your Smeldr site
-    with scope <span class="scope">{{.Scope}}</span>.
+    <strong>{{.ClientName}}</strong> is requesting access to your Smeldr site.
   </p>
   {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
   <form method="POST" action="/oauth/authorize">
@@ -61,10 +58,11 @@ var authorizeForm = template.Must(template.New("authorize").Parse(`<!DOCTYPE htm
     <input type="hidden" name="code_challenge"         value="{{.CodeChallenge}}">
     <input type="hidden" name="code_challenge_method"  value="{{.CodeChallengeMethod}}">
     <input type="hidden" name="resource"               value="{{.Resource}}">
-    <label for="bearer_token">Smeldr Bearer Token</label>
+    <p class="meta">This client acts with the token you paste, and has no rights of its own. If you paste your own token, it acts as you.</p>
+    <label for="bearer_token">Smeldr token for this client</label>
     <input type="password" id="bearer_token" name="bearer_token"
-      placeholder="Paste the Smeldr token made for whoever will use this client" autocomplete="off" required>
-    <p class="meta">The client acts with the token you paste: its identity, its rights, its signature in the history. If you paste your own token, the client acts as you.</p>
+      placeholder="Paste a Smeldr token" autocomplete="off" required>
+    <p class="meta">Use the token made for whoever or whatever will use this client. If the token is revoked or expires, the client stops.</p>
     <button type="submit">Approve</button>
   </form>
   <p class="footer">Powered by <a href="https://smeldr.dev">smeldr.dev</a></p>
@@ -222,7 +220,7 @@ func (s *Server) authorizePostHandler(w http.ResponseWriter, r *http.Request) {
 	// cannot say which token that is issues none.
 	if s.cfg.ResolveBearer == nil {
 		slog.Warn("oauth: sign-in refused: Config.ResolveBearer is not set", "client_id", p.ClientID, "remote_addr", addr)
-		refuse(http.StatusServiceUnavailable, "This server cannot sign you in through a client yet: it is not set up to say who an access token acts for. Ask its operator to update it.")
+		refuse(http.StatusServiceUnavailable, "This server cannot connect a client yet. Ask its operator to update Smeldr.")
 		return
 	}
 	subject, ok := s.cfg.ResolveBearer(r.FormValue("bearer_token"))
@@ -232,7 +230,7 @@ func (s *Server) authorizePostHandler(w http.ResponseWriter, r *http.Request) {
 			"remote_addr", addr,
 		)
 		// Re-render form with error message (never disclose why it failed).
-		refuse(http.StatusUnauthorized, "Invalid bearer token. Please paste a valid Smeldr bearer token.")
+		refuse(http.StatusUnauthorized, "This token is not valid. Check that it is whole, and not revoked or expired.")
 		return
 	}
 
