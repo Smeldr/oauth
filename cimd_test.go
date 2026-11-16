@@ -36,10 +36,10 @@ func testFetchServer(t *testing.T, ts *httptest.Server) *Server {
 	}
 	t.Cleanup(func() { store.Close() })
 	return New(Config{
-		Issuer:       ts.URL,
-		Resource:     ts.URL + "/mcp",
-		VerifyBearer: func(string) bool { return true },
-		HTTPClient:   ts.Client(),
+		Issuer:        ts.URL,
+		Resource:      ts.URL + "/mcp",
+		ResolveBearer: resolveWith(func(string) bool { return true }), TokenActive: activeTest,
+		HTTPClient: ts.Client(),
 	}, store)
 }
 
@@ -112,9 +112,9 @@ func TestFetchCIMD_NonHTTPS_Rejected(t *testing.T) {
 	}
 	defer store.Close()
 	srv := New(Config{
-		Issuer:       "https://issuer.example.com",
-		Resource:     "https://issuer.example.com/mcp",
-		VerifyBearer: func(string) bool { return true },
+		Issuer:        "https://issuer.example.com",
+		Resource:      "https://issuer.example.com/mcp",
+		ResolveBearer: resolveWith(func(string) bool { return true }), TokenActive: activeTest,
 	}, store)
 
 	if _, err := srv.fetchCIMD("http://client.example.com", "http://client.example.com/callback"); err == nil {

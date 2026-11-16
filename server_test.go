@@ -68,10 +68,10 @@ func newTestServer(t *testing.T, verifyBearer func(string) bool) (*httptest.Serv
 	t.Cleanup(ts.Close)
 
 	srv := oauth.New(oauth.Config{
-		Issuer:       ts.URL,
-		Resource:     ts.URL + "/mcp",
-		VerifyBearer: verifyBearer,
-		HTTPClient:   ts.Client(), // trusts the test TLS certificate
+		Issuer:        ts.URL,
+		Resource:      ts.URL + "/mcp",
+		ResolveBearer: resolveWith(verifyBearer), TokenActive: activeTest,
+		HTTPClient: ts.Client(), // trusts the test TLS certificate
 	}, store)
 	oauthHandler = srv.Handler()
 	return ts, store
@@ -115,6 +115,10 @@ func TestDiscovery(t *testing.T) {
 	methods, _ := meta["code_challenge_methods_supported"].([]any)
 	if len(methods) == 0 || methods[0] != "S256" {
 		t.Errorf("code_challenge_methods_supported = %v, want [S256]", methods)
+	}
+	// A scope gives nothing (D195), so no admin level is advertised.
+	if got := fmt.Sprint(meta["scopes_supported"]); got != "[mcp offline_access]" {
+		t.Errorf("scopes_supported = %s, want [mcp offline_access]", got)
 	}
 	if got := meta["authorization_response_iss_parameter_supported"]; got != true {
 		t.Errorf("authorization_response_iss_parameter_supported = %v, want true", got)
@@ -394,6 +398,7 @@ func TestTokenExchange_Valid(t *testing.T) {
 	// Pre-store a valid auth code.
 	code := "test-code-valid-001"
 	_ = store.SaveCode(context.Background(), oauth.AuthCode{
+		UserID: testSubject.UserID, TokenID: testSubject.TokenID,
 		Code:          code,
 		ClientID:      ts.URL,
 		RedirectURI:   ts.URL + "/callback",
@@ -437,6 +442,7 @@ func TestTokenExchange_ExpiredCode(t *testing.T) {
 
 	code := "test-code-expired-001"
 	_ = store.SaveCode(context.Background(), oauth.AuthCode{
+		UserID: testSubject.UserID, TokenID: testSubject.TokenID,
 		Code:          code,
 		ClientID:      ts.URL,
 		RedirectURI:   ts.URL + "/callback",
@@ -472,6 +478,7 @@ func TestTokenExchange_WrongVerifier(t *testing.T) {
 
 	code := "test-code-wrong-verifier-001"
 	_ = store.SaveCode(context.Background(), oauth.AuthCode{
+		UserID: testSubject.UserID, TokenID: testSubject.TokenID,
 		Code:          code,
 		ClientID:      ts.URL,
 		RedirectURI:   ts.URL + "/callback",
@@ -507,6 +514,7 @@ func TestTokenExchange_MissingResource(t *testing.T) {
 
 	code := "test-code-missing-resource-001"
 	_ = store.SaveCode(context.Background(), oauth.AuthCode{
+		UserID: testSubject.UserID, TokenID: testSubject.TokenID,
 		Code:          code,
 		ClientID:      ts.URL,
 		RedirectURI:   ts.URL + "/callback",
@@ -542,6 +550,7 @@ func TestTokenExchange_ResourceMismatch(t *testing.T) {
 
 	code := "test-code-resource-mismatch-001"
 	_ = store.SaveCode(context.Background(), oauth.AuthCode{
+		UserID: testSubject.UserID, TokenID: testSubject.TokenID,
 		Code:          code,
 		ClientID:      ts.URL,
 		RedirectURI:   ts.URL + "/callback",
@@ -575,11 +584,11 @@ func TestTokenRefresh_Valid(t *testing.T) {
 	ts, store := newTestServer(t, func(string) bool { return true })
 
 	refreshToken := "test-refresh-token-001"
-	_ = store.SaveRefreshToken(context.Background(), oauth.RefreshToken{
+	_ = store.SaveRefreshToken(context.Background(), withSubject(oauth.RefreshToken{
 		Token:    refreshToken,
 		ClientID: ts.URL,
 		Scope:    "mcp offline_access",
-	})
+	}))
 
 	resp := postToken(t, ts.Client(), ts.URL, url.Values{
 		"grant_type":    {"refresh_token"},
@@ -603,11 +612,11 @@ func TestTokenRefresh_ResourceIsConfigured(t *testing.T) {
 	ts, store := newTestServer(t, func(string) bool { return true })
 
 	refreshToken := "test-refresh-token-resource-001"
-	_ = store.SaveRefreshToken(context.Background(), oauth.RefreshToken{
+	_ = store.SaveRefreshToken(context.Background(), withSubject(oauth.RefreshToken{
 		Token:    refreshToken,
 		ClientID: ts.URL,
 		Scope:    "mcp offline_access",
-	})
+	}))
 
 	resp := postToken(t, ts.Client(), ts.URL, url.Values{
 		"grant_type":    {"refresh_token"},
@@ -625,9 +634,9 @@ func TestTokenRefresh_ResourceIsConfigured(t *testing.T) {
 	accessToken, _ := result["access_token"].(string)
 
 	srv := oauth.New(oauth.Config{
-		Issuer:       ts.URL,
-		Resource:     testResource(ts),
-		VerifyBearer: func(string) bool { return true },
+		Issuer:        ts.URL,
+		Resource:      testResource(ts),
+		ResolveBearer: resolveWith(func(string) bool { return true }), TokenActive: activeTest,
 	}, store)
 	at, err := srv.ValidateAccessToken(context.Background(), accessToken)
 	if err != nil {
@@ -670,9 +679,9 @@ func TestValidateAccessToken_Valid(t *testing.T) {
 	})
 
 	srv := oauth.New(oauth.Config{
-		Issuer:       ts.URL,
-		Resource:     ts.URL + "/mcp",
-		VerifyBearer: func(string) bool { return true },
+		Issuer:        ts.URL,
+		Resource:      ts.URL + "/mcp",
+		ResolveBearer: resolveWith(func(string) bool { return true }), TokenActive: activeTest,
 	}, store)
 
 	at, err := srv.ValidateAccessToken(context.Background(), token)
@@ -696,9 +705,9 @@ func TestValidateAccessToken_Expired(t *testing.T) {
 	})
 
 	srv := oauth.New(oauth.Config{
-		Issuer:       ts.URL,
-		Resource:     ts.URL + "/mcp",
-		VerifyBearer: func(string) bool { return true },
+		Issuer:        ts.URL,
+		Resource:      ts.URL + "/mcp",
+		ResolveBearer: resolveWith(func(string) bool { return true }), TokenActive: activeTest,
 	}, store)
 
 	_, err := srv.ValidateAccessToken(context.Background(), token)
@@ -712,9 +721,9 @@ func TestValidateAccessToken_Unknown(t *testing.T) {
 	ts, store := newTestServer(t, func(string) bool { return true })
 
 	srv := oauth.New(oauth.Config{
-		Issuer:       ts.URL,
-		Resource:     ts.URL + "/mcp",
-		VerifyBearer: func(string) bool { return true },
+		Issuer:        ts.URL,
+		Resource:      ts.URL + "/mcp",
+		ResolveBearer: resolveWith(func(string) bool { return true }), TokenActive: activeTest,
 	}, store)
 
 	_, err := srv.ValidateAccessToken(context.Background(), "nonexistent-token")
@@ -731,8 +740,8 @@ func TestNew_PanicsOnEmptyResource(t *testing.T) {
 		}
 	}()
 	oauth.New(oauth.Config{
-		Issuer:       "https://cms.example.com",
-		VerifyBearer: func(string) bool { return true },
+		Issuer:        "https://cms.example.com",
+		ResolveBearer: resolveWith(func(string) bool { return true }), TokenActive: activeTest,
 		// Resource omitted
 	}, store)
 }

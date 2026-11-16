@@ -63,7 +63,8 @@ var authorizeForm = template.Must(template.New("authorize").Parse(`<!DOCTYPE htm
     <input type="hidden" name="resource"               value="{{.Resource}}">
     <label for="bearer_token">Smeldr Bearer Token</label>
     <input type="password" id="bearer_token" name="bearer_token"
-      placeholder="Paste your Smeldr bearer token" autocomplete="off" required>
+      placeholder="Paste the Smeldr token made for whoever will use this client" autocomplete="off" required>
+    <p class="meta">The client acts with the token you paste: its identity, its rights, its signature in the history. If you paste your own token, the client acts as you.</p>
     <button type="submit">Approve</button>
   </form>
   <p class="footer">Powered by <a href="https://smeldr.dev">smeldr.dev</a></p>
@@ -207,25 +208,31 @@ func (s *Server) authorizePostHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	bearerToken := r.FormValue("bearer_token")
-	if !s.cfg.VerifyBearer(bearerToken) {
+	clientName := info.ClientName
+	if clientName == "" {
+		clientName = p.ClientID
+	}
+	refuse := func(status int, msg string) {
+		data := authorizeFormData{authorizeParams: p, ClientName: clientName, Error: msg}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(status)
+		authorizeForm.Execute(w, data) //nolint:errcheck
+	}
+	// D195: an access token stands for the token pasted here. A server that
+	// cannot say which token that is issues none.
+	if s.cfg.ResolveBearer == nil {
+		slog.Warn("oauth: sign-in refused: Config.ResolveBearer is not set", "client_id", p.ClientID, "remote_addr", addr)
+		refuse(http.StatusServiceUnavailable, "This server cannot sign you in through a client yet: it is not set up to say who an access token acts for. Ask its operator to update it.")
+		return
+	}
+	subject, ok := s.cfg.ResolveBearer(r.FormValue("bearer_token"))
+	if !ok || subject.UserID == "" || subject.TokenID == "" {
 		slog.Warn("oauth: bearer token validation failed",
 			"client_id", p.ClientID,
 			"remote_addr", addr,
 		)
 		// Re-render form with error message (never disclose why it failed).
-		clientName := info.ClientName
-		if clientName == "" {
-			clientName = p.ClientID
-		}
-		data := authorizeFormData{
-			authorizeParams: p,
-			ClientName:      clientName,
-			Error:           "Invalid bearer token. Please paste a valid Smeldr bearer token.",
-		}
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.WriteHeader(http.StatusUnauthorized)
-		authorizeForm.Execute(w, data) //nolint:errcheck
+		refuse(http.StatusUnauthorized, "Invalid bearer token. Please paste a valid Smeldr bearer token.")
 		return
 	}
 
@@ -239,6 +246,8 @@ func (s *Server) authorizePostHandler(w http.ResponseWriter, r *http.Request) {
 		CodeChallenge: p.CodeChallenge,
 		Resource:      p.Resource,
 		ExpiresAt:     s.now().Add(s.cfg.AuthCodeTTL),
+		UserID:        subject.UserID,
+		TokenID:       subject.TokenID,
 	}
 	if err := s.store.SaveCode(r.Context(), authCode); err != nil {
 		slog.Warn("oauth: failed to save auth code",

@@ -49,6 +49,12 @@ type AuthCode struct {
 	Resource string
 	// ExpiresAt is the UTC time after which this code must be rejected.
 	ExpiresAt time.Time
+	// UserID and TokenID are the subject: the identity of the Smeldr token
+	// pasted at sign-in and that token's stored fingerprint, never its value
+	// (D195). The access token stands for exactly that token. Empty on a
+	// record made before they existed.
+	UserID  string
+	TokenID string
 }
 
 // AccessToken is a Bearer access token issued after code exchange.
@@ -61,13 +67,20 @@ type AccessToken struct {
 	Scope string
 	// Resource is the RFC 8707 resource this token is bound to (its audience).
 	Resource string
-	// ExpiresAt is the UTC time after which this token is invalid.
+	// ExpiresAt is the UTC time after which this token is invalid. It is
+	// never later than the subject's token's own expiry.
 	ExpiresAt time.Time
+	// UserID and TokenID are the subject: the identity of the Smeldr token
+	// pasted at sign-in and that token's stored fingerprint, never its value
+	// (D195). The access token stands for exactly that token. Empty on a
+	// record made before they existed.
+	UserID  string
+	TokenID string
 }
 
-// RefreshToken is a long-lived token used to obtain new access tokens.
-// In v1, refresh tokens do not expire. They are issued only when the
-// authorization request includes the [offline_access] scope.
+// RefreshToken is a token used to obtain new access tokens, issued only when
+// the authorization request includes the [offline_access] scope. Each use
+// rotates it: the grant issues a new one and the used one is refused after.
 type RefreshToken struct {
 	// Token is the raw token value.
 	Token string
@@ -75,4 +88,22 @@ type RefreshToken struct {
 	ClientID string
 	// Scope is the space-separated scope string for this token.
 	Scope string
+	// ExpiresAt is the UTC time after which this token is refused: never
+	// later than the subject's token's own expiry. Zero on a record made
+	// before it existed; such a token is refused.
+	ExpiresAt time.Time
+	// UserID and TokenID are the subject: the identity of the Smeldr token
+	// pasted at sign-in and that token's stored fingerprint, never its value
+	// (D195). The access token stands for exactly that token. Empty on a
+	// record made before they existed.
+	UserID  string
+	TokenID string
+}
+
+// refreshRotator is the optional atomic rotation of a refresh token: it
+// removes old and saves next in one step, and reports [ErrRefreshTokenNotFound]
+// when old was already used, so two uses of one token cannot both succeed.
+// [SQLiteStore] implements it; another [Store] is rotated by delete and save.
+type refreshRotator interface {
+	RotateRefreshToken(ctx context.Context, old string, next RefreshToken) error
 }

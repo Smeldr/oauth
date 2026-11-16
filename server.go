@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 )
@@ -51,6 +52,28 @@ type Config struct {
 	//	},
 	VerifyBearer func(token string) bool
 
+	// ResolveBearer resolves a Smeldr bearer token submitted at
+	// /oauth/authorize to the token an access token will stand for: its
+	// identity, its stored fingerprint and its expiry (D195). ok is false for a token that does not
+	// authenticate. When it is set, VerifyBearer is not used. A server that
+	// sets only VerifyBearer refuses every sign-in at the form, in plain
+	// words: an access token that cannot say who it acts for is never issued.
+	//
+	//	ResolveBearer: func(token string) (oauth.Subject, bool) {
+	//	    u, ok := smeldr.VerifyTokenString(token, app.Secret(), app.TokenStore())
+	//	    ...
+	//	},
+	ResolveBearer func(token string) (Subject, bool)
+
+	// TokenActive re-reads the subject behind a refresh token by its stored
+	// fingerprint at each refresh: ok is false when the token was revoked or
+	// has expired, and the refresh is refused. Required with ResolveBearer.
+	TokenActive func(tokenID string) (Subject, bool)
+
+	// RefreshTokenTTL caps how long a refresh token lives when its subject's
+	// token has no expiry. Default: 30 days.
+	RefreshTokenTTL time.Duration
+
 	// Resource is the canonical resource identifier of the protected MCP server
 	// this authorization server issues audience-bound tokens for (RFC 8707 —
 	// Resource Indicators for OAuth 2.0). It must match the "resource" field the
@@ -67,6 +90,24 @@ type Config struct {
 	HTTPClient *http.Client
 }
 
+// Subject is the Smeldr token an access token stands for (D195): the token's
+// identity, its stored fingerprint (never its value), and its expiry (zero
+// for none). The access token is that token's request under another name: it
+// adds no identity and no rights, and a scope gives none.
+type Subject struct {
+	UserID    string
+	TokenID   string
+	ExpiresAt time.Time
+}
+
+// earlier returns the earlier of t and limit; a zero limit is no limit.
+func earlier(t, limit time.Time) time.Time {
+	if !limit.IsZero() && limit.Before(t) {
+		return limit
+	}
+	return t
+}
+
 // Server is an OAuth 2.1 authorization server.
 // Create with [New]; use [Handler] to mount endpoints.
 type Server struct {
@@ -81,8 +122,17 @@ func New(cfg Config, store Store) *Server {
 	if cfg.Issuer == "" {
 		panic("oauth: Config.Issuer must not be empty")
 	}
-	if cfg.VerifyBearer == nil {
-		panic("oauth: Config.VerifyBearer must not be nil")
+	if cfg.VerifyBearer == nil && cfg.ResolveBearer == nil {
+		panic("oauth: Config.ResolveBearer must not be nil")
+	}
+	if cfg.ResolveBearer != nil && cfg.TokenActive == nil {
+		panic("oauth: Config.TokenActive must not be nil when ResolveBearer is set")
+	}
+	if cfg.ResolveBearer == nil {
+		slog.Warn("oauth: Config.ResolveBearer is not set: every sign-in is refused until it is (VerifyBearer alone cannot say who an access token acts for)")
+	}
+	if cfg.RefreshTokenTTL <= 0 {
+		cfg.RefreshTokenTTL = 30 * 24 * time.Hour
 	}
 	if cfg.Resource == "" {
 		panic("oauth: Config.Resource must not be empty")

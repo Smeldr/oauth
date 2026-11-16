@@ -16,7 +16,7 @@ func (s *Server) metadataHandler(w http.ResponseWriter, r *http.Request) {
 		"grant_types_supported":                          []string{"authorization_code", "refresh_token"},
 		"code_challenge_methods_supported":               []string{"S256"},
 		"token_endpoint_auth_methods_supported":          []string{"none"},
-		"scopes_supported":                               []string{"mcp", "mcp:admin", "offline_access"},
+		"scopes_supported":                               []string{"mcp", "offline_access"},
 		"client_id_metadata_document_supported":          true,
 		"authorization_response_iss_parameter_supported": true,
 	}

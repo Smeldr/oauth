@@ -79,6 +79,59 @@ func migrateLegacyTableNames(ctx context.Context, db *sql.DB) error {
 // Idempotency: uses PRAGMA table_info to check whether the column already
 // exists before altering. A table that does not exist yet (fresh install) or
 // already has the column is skipped without error.
+// migrateAddSubjectColumns adds the subject columns (D195) to tables made
+// before them: user_id and token_id on the code, token and refresh
+// token tables, and expires_at on the refresh token table. It runs after the
+// CREATE TABLE statements, so every table exists; a column already there is
+// skipped. Only SQLite databases are touched.
+func migrateAddSubjectColumns(ctx context.Context, db *sql.DB) error {
+	var dummy int
+	if err := db.QueryRowContext(ctx, `SELECT 1 FROM sqlite_master LIMIT 1`).Scan(&dummy); err != nil && err != sql.ErrNoRows {
+		return nil
+	}
+	cols := []struct{ table, column, def string }{
+		{"smeldr_oauth_codes", "user_id", "TEXT NOT NULL DEFAULT ''"},
+		{"smeldr_oauth_codes", "token_id", "TEXT NOT NULL DEFAULT ''"},
+		{"smeldr_oauth_tokens", "user_id", "TEXT NOT NULL DEFAULT ''"},
+		{"smeldr_oauth_tokens", "token_id", "TEXT NOT NULL DEFAULT ''"},
+		{"smeldr_oauth_refresh_tokens", "user_id", "TEXT NOT NULL DEFAULT ''"},
+		{"smeldr_oauth_refresh_tokens", "token_id", "TEXT NOT NULL DEFAULT ''"},
+		{"smeldr_oauth_refresh_tokens", "expires_at", "INTEGER NOT NULL DEFAULT 0"},
+	}
+	for _, c := range cols {
+		has, err := hasColumn(ctx, db, c.table, c.column)
+		if err != nil {
+			return err
+		}
+		if has {
+			continue
+		}
+		if _, err := db.ExecContext(ctx, `ALTER TABLE `+c.table+` ADD COLUMN `+c.column+` `+c.def); err != nil {
+			return fmt.Errorf("oauth: add %s.%s: %w", c.table, c.column, err)
+		}
+	}
+	return nil
+}
+
+// hasColumn reports whether table has column.
+func hasColumn(ctx context.Context, db *sql.DB, table, column string) (bool, error) {
+	rows, err := db.QueryContext(ctx, `SELECT name FROM pragma_table_info(?)`, table)
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return false, err
+		}
+		if name == column {
+			return true, nil
+		}
+	}
+	return false, rows.Err()
+}
+
 func migrateAddResourceColumn(ctx context.Context, db *sql.DB) error {
 	var dummy int
 	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master`).Scan(&dummy); err != nil {

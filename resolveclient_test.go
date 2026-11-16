@@ -103,10 +103,10 @@ func newTestServerNoRegistration(t *testing.T) *httptest.Server {
 	t.Cleanup(ts.Close)
 
 	srv := oauth.New(oauth.Config{
-		Issuer:       ts.URL,
-		Resource:     ts.URL + "/mcp",
-		VerifyBearer: func(string) bool { return true },
-		HTTPClient:   ts.Client(),
+		Issuer:        ts.URL,
+		Resource:      ts.URL + "/mcp",
+		ResolveBearer: resolveWith(func(string) bool { return true }), TokenActive: activeTest,
+		HTTPClient: ts.Client(),
 	}, store)
 	oauthHandler = srv.Handler()
 	return ts

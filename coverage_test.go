@@ -93,10 +93,10 @@ func newTestServerNoClientName(t *testing.T, verifyBearer func(string) bool) *ht
 	t.Cleanup(ts.Close)
 
 	srv := oauth.New(oauth.Config{
-		Issuer:       ts.URL,
-		Resource:     ts.URL + "/mcp",
-		VerifyBearer: verifyBearer,
-		HTTPClient:   ts.Client(),
+		Issuer:        ts.URL,
+		Resource:      ts.URL + "/mcp",
+		ResolveBearer: resolveWith(verifyBearer), TokenActive: activeTest,
+		HTTPClient: ts.Client(),
 	}, store)
 	oauthHandler = srv.Handler()
 	return ts
@@ -312,6 +312,7 @@ func TestTokenExchange_ClientIDMismatch(t *testing.T) {
 
 	code := "test-code-client-mismatch"
 	_ = store.SaveCode(context.Background(), oauth.AuthCode{
+		UserID: testSubject.UserID, TokenID: testSubject.TokenID,
 		Code:          code,
 		ClientID:      ts.URL,
 		RedirectURI:   ts.URL + "/callback",
@@ -346,6 +347,7 @@ func TestTokenExchange_RedirectURIMismatch(t *testing.T) {
 
 	code := "test-code-redirect-mismatch"
 	_ = store.SaveCode(context.Background(), oauth.AuthCode{
+		UserID: testSubject.UserID, TokenID: testSubject.TokenID,
 		Code:          code,
 		ClientID:      ts.URL,
 		RedirectURI:   ts.URL + "/callback",
@@ -399,11 +401,11 @@ func TestTokenRefresh_ClientIDMismatch(t *testing.T) {
 	ts, store := newTestServer(t, func(string) bool { return true })
 
 	refreshToken := "test-refresh-client-mismatch"
-	_ = store.SaveRefreshToken(context.Background(), oauth.RefreshToken{
+	_ = store.SaveRefreshToken(context.Background(), withSubject(oauth.RefreshToken{
 		Token:    refreshToken,
 		ClientID: ts.URL,
 		Scope:    "mcp offline_access",
-	})
+	}))
 
 	resp := postToken(t, ts.Client(), ts.URL, url.Values{
 		"grant_type":    {"refresh_token"},
@@ -430,6 +432,7 @@ func TestTokenExchange_NoOfflineAccess_NoRefreshToken(t *testing.T) {
 
 	code := "test-code-no-offline-access"
 	_ = store.SaveCode(context.Background(), oauth.AuthCode{
+		UserID: testSubject.UserID, TokenID: testSubject.TokenID,
 		Code:          code,
 		ClientID:      ts.URL,
 		RedirectURI:   ts.URL + "/callback",
@@ -468,8 +471,8 @@ func TestNew_PanicsOnEmptyIssuer(t *testing.T) {
 		}
 	}()
 	oauth.New(oauth.Config{
-		Resource:     "https://server.example.com/mcp",
-		VerifyBearer: func(string) bool { return true },
+		Resource:      "https://server.example.com/mcp",
+		ResolveBearer: resolveWith(func(string) bool { return true }), TokenActive: activeTest,
 	}, store)
 }
 
@@ -491,9 +494,9 @@ func TestNew_DefaultsHTTPClient(t *testing.T) {
 	// HTTPClient omitted — New must default it rather than leaving it nil
 	// (a nil client would panic the first time a CIMD fetch happens).
 	srv := oauth.New(oauth.Config{
-		Issuer:       "https://cms.example.com",
-		Resource:     "https://cms.example.com/mcp",
-		VerifyBearer: func(string) bool { return true },
+		Issuer:        "https://cms.example.com",
+		Resource:      "https://cms.example.com/mcp",
+		ResolveBearer: resolveWith(func(string) bool { return true }), TokenActive: activeTest,
 	}, store)
 	if srv == nil {
 		t.Fatal("New returned nil")
@@ -504,9 +507,9 @@ func TestIssuer(t *testing.T) {
 	ts, _ := newTestServer(t, func(string) bool { return true })
 	store := testStore(t)
 	srv := oauth.New(oauth.Config{
-		Issuer:       ts.URL,
-		Resource:     ts.URL + "/mcp",
-		VerifyBearer: func(string) bool { return true },
+		Issuer:        ts.URL,
+		Resource:      ts.URL + "/mcp",
+		ResolveBearer: resolveWith(func(string) bool { return true }), TokenActive: activeTest,
 	}, store)
 	if got := srv.Issuer(); got != ts.URL {
 		t.Errorf("Issuer() = %q, want %q", got, ts.URL)

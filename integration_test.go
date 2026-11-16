@@ -62,10 +62,10 @@ func TestFullFlow(t *testing.T) {
 	defer ts.Close()
 
 	srv := oauth.New(oauth.Config{
-		Issuer:       ts.URL,
-		Resource:     ts.URL + "/mcp",
-		VerifyBearer: func(token string) bool { return token == "valid-forge-token" },
-		HTTPClient:   ts.Client(), // trusts the test TLS certificate
+		Issuer:        ts.URL,
+		Resource:      ts.URL + "/mcp",
+		ResolveBearer: resolveWith(func(token string) bool { return token == "valid-forge-token" }), TokenActive: activeTest,
+		HTTPClient: ts.Client(), // trusts the test TLS certificate
 	}, store)
 	oauthHandler = srv.Handler()
 
@@ -211,18 +211,18 @@ func TestFullFlow_RefreshToken(t *testing.T) {
 	defer store.Close()
 
 	srv := oauth.New(oauth.Config{
-		Issuer:       "https://example.com",
-		Resource:     "https://example.com/mcp",
-		VerifyBearer: func(string) bool { return true },
+		Issuer:        "https://example.com",
+		Resource:      "https://example.com/mcp",
+		ResolveBearer: resolveWith(func(string) bool { return true }), TokenActive: activeTest,
 	}, store)
 
 	// Pre-store a refresh token.
 	refreshToken := "integration-refresh-token-001"
-	_ = store.SaveRefreshToken(context.Background(), oauth.RefreshToken{
+	_ = store.SaveRefreshToken(context.Background(), withSubject(oauth.RefreshToken{
 		Token:    refreshToken,
 		ClientID: "https://client.example.com",
 		Scope:    "mcp offline_access",
-	})
+	}))
 
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()

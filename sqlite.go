@@ -18,7 +18,9 @@ CREATE TABLE IF NOT EXISTS smeldr_oauth_codes (
     scope          TEXT NOT NULL,
     code_challenge TEXT NOT NULL,
     resource       TEXT NOT NULL DEFAULT '',
-    expires_at     INTEGER NOT NULL
+    expires_at     INTEGER NOT NULL,
+    user_id        TEXT NOT NULL DEFAULT '',
+    token_id       TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS smeldr_oauth_tokens (
@@ -26,13 +28,18 @@ CREATE TABLE IF NOT EXISTS smeldr_oauth_tokens (
     client_id  TEXT NOT NULL,
     scope      TEXT NOT NULL,
     resource   TEXT NOT NULL DEFAULT '',
-    expires_at INTEGER NOT NULL
+    expires_at INTEGER NOT NULL,
+    user_id    TEXT NOT NULL DEFAULT '',
+    token_id   TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS smeldr_oauth_refresh_tokens (
-    token     TEXT PRIMARY KEY,
-    client_id TEXT NOT NULL,
-    scope     TEXT NOT NULL
+    token      TEXT PRIMARY KEY,
+    client_id  TEXT NOT NULL,
+    scope      TEXT NOT NULL,
+    expires_at INTEGER NOT NULL DEFAULT 0,
+    user_id    TEXT NOT NULL DEFAULT '',
+    token_id   TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS smeldr_oauth_registered_clients (
@@ -71,6 +78,10 @@ func NewSQLiteStore(path string) (*SQLiteStore, error) {
 		db.Close()
 		return nil, fmt.Errorf("oauth: create tables: %w", err)
 	}
+	if err := migrateAddSubjectColumns(context.Background(), db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("oauth: migrate subject columns: %w", err)
+	}
 	return &SQLiteStore{db: db}, nil
 }
 
@@ -81,21 +92,21 @@ func (s *SQLiteStore) Close() error { return s.db.Close() }
 
 func (s *SQLiteStore) SaveCode(ctx context.Context, c AuthCode) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO smeldr_oauth_codes (code, client_id, redirect_uri, scope, code_challenge, resource, expires_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		c.Code, c.ClientID, c.RedirectURI, c.Scope, c.CodeChallenge, c.Resource, c.ExpiresAt.Unix(),
+		`INSERT INTO smeldr_oauth_codes (code, client_id, redirect_uri, scope, code_challenge, resource, expires_at, user_id, token_id)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		c.Code, c.ClientID, c.RedirectURI, c.Scope, c.CodeChallenge, c.Resource, c.ExpiresAt.Unix(), c.UserID, c.TokenID,
 	)
 	return err
 }
 
 func (s *SQLiteStore) GetCode(ctx context.Context, code string) (AuthCode, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT code, client_id, redirect_uri, scope, code_challenge, resource, expires_at
+		`SELECT code, client_id, redirect_uri, scope, code_challenge, resource, expires_at, user_id, token_id
 		 FROM smeldr_oauth_codes WHERE code = ?`, code,
 	)
 	var c AuthCode
 	var expiresUnix int64
-	if err := row.Scan(&c.Code, &c.ClientID, &c.RedirectURI, &c.Scope, &c.CodeChallenge, &c.Resource, &expiresUnix); err != nil {
+	if err := row.Scan(&c.Code, &c.ClientID, &c.RedirectURI, &c.Scope, &c.CodeChallenge, &c.Resource, &expiresUnix, &c.UserID, &c.TokenID); err != nil {
 		if err == sql.ErrNoRows {
 			return AuthCode{}, ErrCodeNotFound
 		}
@@ -114,21 +125,21 @@ func (s *SQLiteStore) DeleteCode(ctx context.Context, code string) error {
 
 func (s *SQLiteStore) SaveToken(ctx context.Context, t AccessToken) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO smeldr_oauth_tokens (token, client_id, scope, resource, expires_at)
-		 VALUES (?, ?, ?, ?, ?)`,
-		t.Token, t.ClientID, t.Scope, t.Resource, t.ExpiresAt.Unix(),
+		`INSERT INTO smeldr_oauth_tokens (token, client_id, scope, resource, expires_at, user_id, token_id)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		t.Token, t.ClientID, t.Scope, t.Resource, t.ExpiresAt.Unix(), t.UserID, t.TokenID,
 	)
 	return err
 }
 
 func (s *SQLiteStore) GetToken(ctx context.Context, token string) (AccessToken, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT token, client_id, scope, resource, expires_at
+		`SELECT token, client_id, scope, resource, expires_at, user_id, token_id
 		 FROM smeldr_oauth_tokens WHERE token = ?`, token,
 	)
 	var t AccessToken
 	var expiresUnix int64
-	if err := row.Scan(&t.Token, &t.ClientID, &t.Scope, &t.Resource, &expiresUnix); err != nil {
+	if err := row.Scan(&t.Token, &t.ClientID, &t.Scope, &t.Resource, &expiresUnix, &t.UserID, &t.TokenID); err != nil {
 		if err == sql.ErrNoRows {
 			return AccessToken{}, ErrTokenNotFound
 		}
@@ -141,23 +152,67 @@ func (s *SQLiteStore) GetToken(ctx context.Context, token string) (AccessToken, 
 // — RefreshToken —
 
 func (s *SQLiteStore) SaveRefreshToken(ctx context.Context, t RefreshToken) error {
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO smeldr_oauth_refresh_tokens (token, client_id, scope) VALUES (?, ?, ?)`,
-		t.Token, t.ClientID, t.Scope,
+	return saveRefreshToken(ctx, s.db, t)
+}
+
+// refreshExec is what saveRefreshToken writes with: the database or a
+// transaction.
+type refreshExec interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
+func saveRefreshToken(ctx context.Context, db refreshExec, t RefreshToken) error {
+	_, err := db.ExecContext(ctx,
+		`INSERT INTO smeldr_oauth_refresh_tokens (token, client_id, scope, expires_at, user_id, token_id) VALUES (?, ?, ?, ?, ?, ?)`,
+		t.Token, t.ClientID, t.Scope, unixOrZero(t.ExpiresAt), t.UserID, t.TokenID,
 	)
 	return err
 }
 
+// unixOrZero is t as Unix seconds, or 0 for the zero time.
+func unixOrZero(t time.Time) int64 {
+	if t.IsZero() {
+		return 0
+	}
+	return t.Unix()
+}
+
+// RotateRefreshToken removes old and saves next in one transaction. It
+// reports [ErrRefreshTokenNotFound], and saves nothing, when old is not
+// stored: it was used already, or never issued.
+func (s *SQLiteStore) RotateRefreshToken(ctx context.Context, old string, next RefreshToken) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck
+	res, err := tx.ExecContext(ctx, `DELETE FROM smeldr_oauth_refresh_tokens WHERE token = ?`, old)
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err != nil || n == 0 {
+		return ErrRefreshTokenNotFound
+	}
+	if err := saveRefreshToken(ctx, tx, next); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func (s *SQLiteStore) GetRefreshToken(ctx context.Context, token string) (RefreshToken, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT token, client_id, scope FROM smeldr_oauth_refresh_tokens WHERE token = ?`, token,
+		`SELECT token, client_id, scope, expires_at, user_id, token_id FROM smeldr_oauth_refresh_tokens WHERE token = ?`, token,
 	)
 	var t RefreshToken
-	if err := row.Scan(&t.Token, &t.ClientID, &t.Scope); err != nil {
+	var expiresUnix int64
+	if err := row.Scan(&t.Token, &t.ClientID, &t.Scope, &expiresUnix, &t.UserID, &t.TokenID); err != nil {
 		if err == sql.ErrNoRows {
 			return RefreshToken{}, ErrRefreshTokenNotFound
 		}
 		return RefreshToken{}, err
+	}
+	if expiresUnix > 0 {
+		t.ExpiresAt = time.Unix(expiresUnix, 0).UTC()
 	}
 	return t, nil
 }

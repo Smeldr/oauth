@@ -9,6 +9,20 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security
+
+- **An access token stands for exactly the Smeldr token pasted at sign-in (core T1287, D195).** Before, the access token kept nothing of the pasted token but that it was valid, and the client's scope set its role. Now the code, the access token and the refresh token keep the pasted token's identity and stored fingerprint, never its value. smeldr.dev/mcp acts with that token's identity, class and rights.
+  - A scope gives no rights and refuses nothing. The discovery document no longer lists `mcp:admin` in `scopes_supported`; a client that still asks for it signs in as before, and its scope is echoed back.
+  - The access token never outlives its Smeldr token.
+  - The token is checked again at the code exchange and at each refresh.
+- **`Config.ResolveBearer` and `Config.TokenActive` replace `VerifyBearer` for sign-in.** A server that sets only `VerifyBearer` now refuses every sign-in at the form, saying it is not set up to say who an access token acts for, and logs a warning at start. A Go server must move to `ResolveBearer` and `TokenActive` (see the README), or its OAuth sign-ins stop. Access tokens issued before this release carry no token and are not accepted: clients sign in again. This breaks without a window, for security (D195).
+- **Refresh tokens rotate and expire (core T1285).** Each refresh returns a new refresh token, and the one used is refused after. Two uses of one token cannot both succeed: `SQLiteStore` swaps it in one transaction, and another `Store` deletes and saves. A refresh token expires with its Smeldr token, or after `Config.RefreshTokenTTL` (30 days by default), whichever is first. A refresh token stored before this release has no expiry and is refused. A client must keep the new refresh token from each response.
+
+### Changed
+
+- The form asks for the token made for whoever will use the client, and says that pasting your own makes the client act as you. The wording is a placeholder until brand words it.
+- The code, token and refresh token tables get `user_id` and `token_id` columns, and the refresh token table an `expires_at` column, added at open.
+
 ---
 
 ## [0.6.1] - 2026-11-13

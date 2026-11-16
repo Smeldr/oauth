@@ -86,10 +86,10 @@ func newFailTestServer(t *testing.T, fs *failStore) *httptest.Server {
 	t.Cleanup(ts.Close)
 
 	srv := oauth.New(oauth.Config{
-		Issuer:       ts.URL,
-		Resource:     ts.URL + "/mcp",
-		VerifyBearer: func(string) bool { return true },
-		HTTPClient:   ts.Client(),
+		Issuer:        ts.URL,
+		Resource:      ts.URL + "/mcp",
+		ResolveBearer: resolveWith(func(string) bool { return true }), TokenActive: activeTest,
+		HTTPClient: ts.Client(),
 	}, fs)
 	oauthHandler = srv.Handler()
 	return ts
@@ -137,6 +137,7 @@ func TestTokenExchange_SaveTokenFails(t *testing.T) {
 
 	code := "test-code-savetoken-fails"
 	_ = fs.SQLiteStore.SaveCode(context.Background(), oauth.AuthCode{
+		UserID: testSubject.UserID, TokenID: testSubject.TokenID,
 		Code:          code,
 		ClientID:      ts.URL,
 		RedirectURI:   ts.URL + "/callback",
@@ -168,6 +169,7 @@ func TestTokenExchange_SaveRefreshTokenFails(t *testing.T) {
 
 	code := "test-code-saverefresh-fails"
 	_ = fs.SQLiteStore.SaveCode(context.Background(), oauth.AuthCode{
+		UserID: testSubject.UserID, TokenID: testSubject.TokenID,
 		Code:          code,
 		ClientID:      ts.URL,
 		RedirectURI:   ts.URL + "/callback",
@@ -197,11 +199,11 @@ func TestTokenRefresh_SaveTokenFails(t *testing.T) {
 	ts := newFailTestServer(t, fs)
 
 	refreshToken := "test-refresh-savetoken-fails"
-	_ = fs.SQLiteStore.SaveRefreshToken(context.Background(), oauth.RefreshToken{
+	_ = fs.SQLiteStore.SaveRefreshToken(context.Background(), withSubject(oauth.RefreshToken{
 		Token:    refreshToken,
 		ClientID: ts.URL,
 		Scope:    "mcp",
-	})
+	}))
 	fs.failSaveToken = true
 
 	resp := postToken(t, ts.Client(), ts.URL, map[string][]string{

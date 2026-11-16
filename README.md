@@ -68,10 +68,20 @@ func main() {
     oauthSrv := oauth.New(oauth.Config{
         Issuer:   "https://cms.example.com",
         Resource: "https://cms.example.com/mcp", // must match smeldr.dev/mcp's own resource identifier
-        VerifyBearer: func(token string) bool {
-            // Validate Smeldr bearer token using smeldr.VerifyTokenString (v1.25.0+).
-            _, ok := smeldr.VerifyTokenString(token, app.Secret(), app.TokenStore())
-            return ok
+        // The access token stands for exactly the token pasted at sign-in (D195):
+        // its identity and fingerprint are kept, never its value.
+        ResolveBearer: func(token string) (oauth.Subject, bool) {
+            u, ok := smeldr.VerifyTokenString(token, app.Secret(), app.TokenStore())
+            if !ok || u.TokenID == "" {
+                return oauth.Subject{}, false
+            }
+            _, exp, ok, _ := app.TokenStore().ActingUser(context.Background(), u.TokenID)
+            return oauth.Subject{UserID: u.ID, TokenID: u.TokenID, ExpiresAt: exp}, ok
+        },
+        // Re-read at every exchange and refresh: a revoked token ends its access tokens.
+        TokenActive: func(tokenID string) (oauth.Subject, bool) {
+            u, exp, ok, _ := app.TokenStore().ActingUser(context.Background(), tokenID)
+            return oauth.Subject{UserID: u.ID, TokenID: tokenID, ExpiresAt: exp}, ok
         },
     }, store)
 

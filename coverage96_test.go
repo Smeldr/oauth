@@ -29,9 +29,9 @@ func newCoverageServer(t *testing.T) (*Server, *SQLiteStore) {
 	}
 	t.Cleanup(func() { store.Close() })
 	return New(Config{
-		Issuer:       "https://cms.example.com",
-		Resource:     "https://cms.example.com/mcp",
-		VerifyBearer: func(string) bool { return true },
+		Issuer:        "https://cms.example.com",
+		Resource:      "https://cms.example.com/mcp",
+		ResolveBearer: resolveWith(func(string) bool { return true }), TokenActive: activeTest,
 	}, store), store
 }
 
