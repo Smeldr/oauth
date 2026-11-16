@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -26,10 +27,13 @@ var (
 
 // Config holds the configuration for the OAuth 2.1 authorization server.
 type Config struct {
-	// Issuer is the HTTPS base URL of this authorization server.
+	// Issuer is the base URL of this authorization server.
 	// Included in RFC 8414 metadata and in WWW-Authenticate headers.
 	// Example: "https://cms.example.com"
-	// Required — New panics if empty.
+	// Required: New panics if it is empty or [ValidateIssuer] refuses it
+	// (not an absolute http or https URL with a host, or with a query or a
+	// fragment). http on a host that is not loopback, user info and a
+	// trailing slash are accepted, each with a warning at New.
 	Issuer string
 
 	// AccessTokenTTL is how long access tokens remain valid.
@@ -117,10 +121,18 @@ type Server struct {
 }
 
 // New creates a Server with the given configuration and store.
-// Panics if cfg.Issuer is empty or cfg.VerifyBearer is nil.
+// Panics if cfg.Issuer is empty or not valid ([ValidateIssuer]), or no
+// sign-in function is set.
 func New(cfg Config, store Store) *Server {
 	if cfg.Issuer == "" {
 		panic("oauth: Config.Issuer must not be empty")
+	}
+	if err := ValidateIssuer(cfg.Issuer); err != nil {
+		panic(err.Error())
+	}
+	issuerURL, _ := url.Parse(cfg.Issuer) // ValidateIssuer parsed it
+	for _, w := range issuerWarnings(issuerURL, cfg.Issuer) {
+		slog.Warn(w, "issuer", issuerURL.Redacted())
 	}
 	if cfg.VerifyBearer == nil && cfg.ResolveBearer == nil {
 		panic("oauth: Config.ResolveBearer must not be nil")

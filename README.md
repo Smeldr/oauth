@@ -66,7 +66,7 @@ func main() {
     }
 
     oauthSrv := oauth.New(oauth.Config{
-        Issuer:   "https://cms.example.com",
+        Issuer:   "https://cms.example.com", // see ValidateIssuer: absolute, no query or fragment
         Resource: "https://cms.example.com/mcp", // must match smeldr.dev/mcp's own resource identifier
         // The access token stands for exactly the token pasted at sign-in (D195):
         // its identity and fingerprint are kept, never its value.

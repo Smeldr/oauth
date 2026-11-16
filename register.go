@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -236,8 +235,7 @@ func checkRedirectURI(u string) string {
 			return "must name a host"
 		}
 	case scheme == "http":
-		host := p.Hostname()
-		if ip := net.ParseIP(host); host != "localhost" && (ip == nil || !ip.IsLoopback()) {
+		if !isLoopbackHost(p.Hostname()) {
 			return "may use http only for a loopback host (127.0.0.1, ::1 or localhost)"
 		}
 	case strings.Contains(scheme, "."):

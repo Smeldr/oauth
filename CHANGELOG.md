@@ -21,6 +21,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - The form says, above the field, that the client acts with the token pasted and has no rights of its own, and that pasting your own token makes it act as you. The field asks for the token made for whoever or whatever will use the client, and says the client stops when that token is revoked or expires. The form no longer shows the client's scope, which gives no rights, and no longer says "bearer". The two refusals are reworded the same way (core T1290).
+- **`New` checks the issuer, with the new `ValidateIssuer` (core T1286).** Before, any non-empty `Config.Issuer` was published as given, so `not-a-url` gave the endpoint `not-a-url/oauth/authorize`. Now `New` panics, naming the issuer (any password redacted) and the fault, when it is not an absolute URL with a host, uses a scheme other than http or https, or has a query or a fragment. None of these ever worked: with a query or a fragment every endpoint answers 404. A path is allowed. Three forms that work today still start, each with one warning at `New`: http on a host that is not loopback (codes and tokens travel in the clear), user info (the metadata publishes it), and a trailing slash (the endpoints get a double slash and are reached only through a 307 redirect).
 - The code, token and refresh token tables get `user_id` and `token_id` columns, and the refresh token table an `expires_at` column, added at open.
 
 ---
